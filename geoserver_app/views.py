@@ -10,26 +10,54 @@ HEADERS = {"Accept": "application/json", "Content-Type": "application/json"}
 @api_view(["GET", "POST"])
 def layergroup_list(request):
     """
-    GET: Fetch all layer groups from GeoServer
-    POST: Create a new layer group in GeoServer
+    GET: Fetch all layer groups.
+    POST: Create a new layer group with parameters (name, layer, style).
     """
     if request.method == "GET":
-        try:
-            response = requests.get(BASE_URL, headers=HEADERS, auth=AUTH)
-            if response.status_code == 200:
-                return Response(response.json(), status=status.HTTP_200_OK)
-            return Response({"error": response.text}, status=response.status_code)
-        except Exception as e:
-            return Response({"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+        # Fetch all layer groups
+        response = requests.get(BASE_URL, headers=HEADERS, auth=AUTH)
+        if response.status_code == 200:
+            return Response(response.json(), status=status.HTTP_200_OK)
+        return Response({"error": response.text}, status=response.status_code)
 
     elif request.method == "POST":
-        try:
-            response = requests.post(BASE_URL, json=request.data, headers=HEADERS, auth=AUTH)
-            if response.status_code in (200, 201):
-                return Response({"message": "Layer group created successfully."}, status=status.HTTP_201_CREATED)
-            return Response({"error": response.text}, status=response.status_code)
-        except Exception as e:
-            return Response({"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+        # Extract parameters from the request data
+        name = request.data.get("name")
+        layer = request.data.get("layer")
+        style = request.data.get("style")
+
+        # Validate the parameters
+        if not all([name, layer, style]):
+            return Response(
+                {"error": "Missing required parameters: 'name', 'layer', or 'style'"},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        # Build the payload for GeoServer
+        payload = {
+            "layerGroup": {
+                "name": name,
+                "layers": {
+                    "layer": [layer]
+                },
+                "styles": {
+                    "style": [style]
+                },
+                "bounds": {
+                    "minx": 126530.81806662556,
+                    "maxx": 4427129.1730813645,
+                    "miny": 699492.3966753744,
+                    "maxy": 4701182.713534636,
+                    "crs": "EPSG:6870"
+                }
+            }
+        }
+
+        # Send the payload to GeoServer
+        response = requests.post(BASE_URL, json=payload, headers=HEADERS, auth=AUTH)
+        if response.status_code in (200, 201):
+            return Response({"message": "Layer group created successfully."}, status=status.HTTP_201_CREATED)
+        return Response({"error": response.text}, status=response.status_code)
 
 
 @api_view(["GET", "PUT", "DELETE"])
@@ -49,10 +77,46 @@ def layergroup_detail(request, name):
             return Response({"error": response.text}, status=response.status_code)
 
         elif request.method == "PUT":
-            response = requests.put(url, json=request.data, headers=HEADERS, auth=AUTH)
-            if response.status_code in (200, 201):
+            print("Request Data:", request.data)  # Debug incoming request
+
+            # Fetch the current layer group configuration
+            response = requests.get(url, headers=HEADERS, auth=AUTH)
+            if response.status_code != 200:
+                return Response({"error": "Layer group not found."}, status=status.HTTP_404_NOT_FOUND)
+
+            current_config = response.json()["layerGroup"]
+            print("Current Config:", current_config)  # Debug existing config
+
+            # Extract and fallback for optional fields
+            title = request.data.get("title", current_config.get("title"))
+            single_layer = request.data.get("layer")
+            single_style = request.data.get("style")
+
+            # Handle layers and styles
+            layers = {"layer": [single_layer]} if single_layer else current_config.get("layers", {}).get("layer", [])
+            styles = {"style": [single_style]} if single_style else current_config.get("styles", {}).get("style", [])
+
+            # Build the updated payload
+            updated_payload = {
+                "layerGroup": {
+                    "name": current_config["name"],  # Name remains unchanged
+                    "title": title,
+                    "mode": current_config["mode"],  # Mode remains unchanged
+                    "layers": layers,
+                    "styles": styles,
+                    "bounds": current_config["bounds"]  # Bounds remain unchanged
+                }
+            }
+
+            # Debug updated payload
+            print("Updated Payload:", updated_payload)
+
+            # Send the PUT request to GeoServer
+            update_response = requests.put(url, json=updated_payload, headers=HEADERS, auth=AUTH)
+            if update_response.status_code in (200, 201):
                 return Response({"message": "Layer group updated successfully."}, status=status.HTTP_200_OK)
-            return Response({"error": response.text}, status=response.status_code)
+            return Response({"error": update_response.text}, status=update_response.status_code)
+
 
         elif request.method == "DELETE":
             response = requests.delete(url, headers=HEADERS, auth=AUTH)
