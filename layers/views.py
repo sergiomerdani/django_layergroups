@@ -3,11 +3,15 @@ from rest_framework.response import Response
 from rest_framework import status
 import requests
 
-BASE_LAYER_URL = "http://localhost:8080/geoserver/rest/workspaces/finiq_ws/datastores/finiqi_data/featuretypes"
 AUTH = ("admin", "geoserver")
 HEADERS = {"Accept": "application/json", "Content-Type": "application/json"}
-workspace = "finiq_ws"
-datastore = "finiqi_data"
+
+
+def construct_base_layer_url(workspace, datastore):
+    """
+    Construct the base URL for GeoServer featuretypes.
+    """
+    return f"http://localhost:8080/geoserver/rest/workspaces/{workspace}/datastores/{datastore}/featuretypes"
 
 
 @api_view(["GET", "POST"])
@@ -16,7 +20,7 @@ def layer_list(request, workspace, datastore):
     GET: Fetch all layers (feature types) from a specific datastore in a workspace with their geometry types.
     POST: Create a new feature type (layer) in a specific datastore.
     """
-    
+    BASE_LAYER_URL = construct_base_layer_url(workspace, datastore)
 
     if request.method == "GET":
         try:
@@ -27,7 +31,6 @@ def layer_list(request, workspace, datastore):
 
             layers_with_geometry = []
 
-            # Loop through each feature type to fetch geometry type
             for feature in feature_types:
                 layer_name = feature.get("name")
                 feature_url = feature.get("href")
@@ -79,13 +82,16 @@ def layer_list(request, workspace, datastore):
 
     elif request.method == "POST":
         try:
+            # Debug received payload
+            print("Received Payload:", request.data)
+
             # Extract feature type details from the request payload
             feature_data = request.data
             if not feature_data:
                 return Response({"error": "Feature type data is required."}, status=status.HTTP_400_BAD_REQUEST)
 
             # Ensure required fields are present
-            required_fields = ["name", "nativeName", "srs", "nativeBoundingBox", "latLonBoundingBox"]
+            required_fields = ["name", "geometry"]
             missing_fields = [field for field in required_fields if field not in feature_data]
             if missing_fields:
                 return Response(
@@ -93,20 +99,54 @@ def layer_list(request, workspace, datastore):
                     status=status.HTTP_400_BAD_REQUEST
                 )
 
-            # Build payload for GeoServer
+            # Map geometry type to GeoServer-compatible bindings
+            geometry_mapping = {
+                "Point": "org.locationtech.jts.geom.Point",
+                "LineString": "org.locationtech.jts.geom.LineString",
+                "Polygon": "org.locationtech.jts.geom.Polygon",
+                "MultiPoint": "org.locationtech.jts.geom.MultiPoint",
+                "MultiLineString": "org.locationtech.jts.geom.MultiLineString",
+                "MultiPolygon": "org.locationtech.jts.geom.MultiPolygon"
+            }
+
+            geometry_binding = geometry_mapping.get(feature_data["geometry"])
+            if not geometry_binding:
+                return Response(
+                    {"error": f"Invalid geometry type: {feature_data['geometry']}. Allowed types are: {', '.join(geometry_mapping.keys())}"},
+                    status=status.HTTP_400_BAD_REQUEST
+                )
+
+            # Construct dynamic payload
             payload = {
                 "featureType": {
                     "name": feature_data["name"],
-                    "nativeName": feature_data["nativeName"],
-                    "title": feature_data.get("title", feature_data["name"]),
-                    "srs": feature_data["srs"],
-                    "nativeBoundingBox": feature_data["nativeBoundingBox"],
-                    "latLonBoundingBox": feature_data["latLonBoundingBox"]
+                    "nativeBoundingBox": {
+                        "minx": -180,
+                        "maxx": 180,
+                        "miny": -90,
+                        "maxy": 90,
+                        "crs": "EPSG:4326"
+                    },
+                    "srs": "EPSG:4326",
+                    "attributes": {
+                        "attribute": [
+                            {"name": "id", "binding": "java.lang.Integer"},
+                            {"name": "geom", "binding": geometry_binding}
+                        ]
+                    }
                 }
             }
 
+            # Debug the payload to be sent
+            print("Payload for GeoServer:", payload)
+
             # Send POST request to GeoServer
             response = requests.post(BASE_LAYER_URL, json=payload, headers=HEADERS, auth=AUTH)
+
+            # Debug response
+            print("Response Status Code:", response.status_code)
+            print("Response Text:", response.text)
+
             if response.status_code in (200, 201):
                 return Response({"message": "Feature type created successfully."}, status=status.HTTP_201_CREATED)
             else:
@@ -118,66 +158,8 @@ def layer_list(request, workspace, datastore):
         except requests.RequestException as e:
             return Response({"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
-    """
-    Fetch all layers (feature types) from a specific datastore in a workspace with their geometry types.
-    """
 
-    try:
-        # Fetch all feature types from the datastore
-        response = requests.get(BASE_LAYER_URL, headers=HEADERS, auth=AUTH)
-        response.raise_for_status()
-        feature_types = response.json().get("featureTypes", {}).get("featureType", [])
 
-        layers_with_geometry = []
-
-        # Loop through each feature type to fetch geometry type
-        for feature in feature_types:
-            layer_name = feature.get("name")
-            feature_url = feature.get("href")
-
-            if not feature_url:
-                layers_with_geometry.append({"name": layer_name, "geometry_type": "Unknown"})
-                continue
-
-            # Fetch detailed feature type information
-            feature_response = requests.get(feature_url, headers=HEADERS, auth=AUTH)
-            if feature_response.status_code != 200:
-                layers_with_geometry.append({"name": layer_name, "geometry_type": "Unknown"})
-                continue
-
-            feature_details = feature_response.json().get("featureType", {})
-            attributes = feature_details.get("attributes", {}).get("attribute", [])
-
-            # Ensure attributes is a list
-            if isinstance(attributes, dict):
-                attributes = [attributes]
-
-            # Extract geometry type
-            geometry_attribute = next(
-                (attr for attr in attributes if attr.get("name") == "geom"),
-                None
-            )
-
-            if geometry_attribute:
-                geometry_binding = geometry_attribute.get("binding")
-                geometry_mapping = {
-                    "org.locationtech.jts.geom.Point": "Point",
-                    "org.locationtech.jts.geom.LineString": "Line",
-                    "org.locationtech.jts.geom.Polygon": "Polygon",
-                    "org.locationtech.jts.geom.MultiPoint": "MultiPoint",
-                    "org.locationtech.jts.geom.MultiLineString": "MultiLine",
-                    "org.locationtech.jts.geom.MultiPolygon": "MultiPolygon",
-                }
-                geometry_type = geometry_mapping.get(geometry_binding, "Unknown Geometry Type")
-            else:
-                geometry_type = "Unknown"
-
-            # Append the layer name and geometry type to the result list
-            layers_with_geometry.append({"name": layer_name, "geometry_type": geometry_type})
-
-        return Response(layers_with_geometry, status=status.HTTP_200_OK)
-    except requests.RequestException as e:
-        return Response({"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
 
 @api_view(["GET"])
@@ -185,13 +167,15 @@ def layer_detail(request, workspace, datastore, layer_name):
     """
     Fetch detailed information about a specific layer (feature type) from a datastore in a workspace.
     """
+    BASE_LAYER_URL = construct_base_layer_url(workspace, datastore)
+
     try:
         # Construct the URL for the specific feature type
-        feature_url = f"http://localhost:8080/geoserver/rest/workspaces/{workspace}/datastores/{datastore}/featuretypes/{layer_name}.json"
+        feature_url = f"{BASE_LAYER_URL}/{layer_name}.json"
 
         # Fetch the feature type details
         response = requests.get(feature_url, headers=HEADERS, auth=AUTH)
-        response.raise_for_status()  # Raise an exception for HTTP errors
+        response.raise_for_status()
 
         # Return the detailed JSON response
         feature_details = response.json()
@@ -199,3 +183,4 @@ def layer_detail(request, workspace, datastore, layer_name):
 
     except requests.RequestException as e:
         return Response({"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
