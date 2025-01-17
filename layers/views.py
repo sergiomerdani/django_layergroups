@@ -162,25 +162,73 @@ def layer_list(request, workspace, datastore):
 
 
 
-@api_view(["GET"])
+@api_view(["GET", "PUT"])
 def layer_detail(request, workspace, datastore, layer_name):
     """
-    Fetch detailed information about a specific layer (feature type) from a datastore in a workspace.
+    GET: Fetch detailed information about a specific layer (feature type) from a datastore in a workspace.
+    PUT: Add new attributes (fields) to an existing layer while preserving id and geometry.
     """
     BASE_LAYER_URL = construct_base_layer_url(workspace, datastore)
 
-    try:
-        # Construct the URL for the specific feature type
-        feature_url = f"{BASE_LAYER_URL}/{layer_name}.json"
+    if request.method == "GET":
+        try:
+            # Construct the URL for the specific feature type
+            feature_url = f"{BASE_LAYER_URL}/{layer_name}.json"
 
-        # Fetch the feature type details
-        response = requests.get(feature_url, headers=HEADERS, auth=AUTH)
-        response.raise_for_status()
+            # Fetch the feature type details
+            response = requests.get(feature_url, headers=HEADERS, auth=AUTH)
+            response.raise_for_status()
 
-        # Return the detailed JSON response
-        feature_details = response.json()
-        return Response(feature_details, status=status.HTTP_200_OK)
+            # Return the detailed JSON response
+            feature_details = response.json()
+            return Response(feature_details, status=status.HTTP_200_OK)
 
-    except requests.RequestException as e:
-        return Response({"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+        except requests.RequestException as e:
+            return Response({"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+    elif request.method == "PUT":
+        try:
+            # Extract the new name from the request payload
+            modification_data = request.data
+            if "name" not in modification_data:
+                return Response({"error": "The 'name' field is required."}, status=status.HTTP_400_BAD_REQUEST)
+
+            new_name = modification_data["name"]
+            new_title = modification_data["title"]
+
+
+            # Construct the URL for the specific feature type
+            feature_url = f"{BASE_LAYER_URL}/{layer_name}.json"
+
+            # Fetch the current layer details
+            response = requests.get(feature_url, headers=HEADERS, auth=AUTH)
+            response.raise_for_status()
+            current_feature_type = response.json()["featureType"]
+
+            # Update only the name of the layer
+            updated_feature_type = {
+                "featureType": {
+                    "name": new_name,
+                    "nativeName": current_feature_type["nativeName"],  # Keep nativeName unchanged
+                    "title": new_title,  # Update title if it matches the previous name
+                    "srs": current_feature_type["srs"],
+                    "nativeBoundingBox": current_feature_type["nativeBoundingBox"],
+                    "latLonBoundingBox": current_feature_type["latLonBoundingBox"],
+                    "attributes": current_feature_type["attributes"],  # Keep attributes unchanged
+                }
+            }
+
+            # Send PUT request to update the layer
+            update_response = requests.put(feature_url, json=updated_feature_type, headers=HEADERS, auth=AUTH)
+            if update_response.status_code in (200, 204):
+                return Response({"message": "Layer name updated successfully."}, status=status.HTTP_200_OK)
+            else:
+                return Response(
+                    {"error": update_response.json() if update_response.headers.get("Content-Type") == "application/json" else update_response.text},
+                    status=update_response.status_code,
+                )
+
+        except requests.RequestException as e:
+            return Response({"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
 
