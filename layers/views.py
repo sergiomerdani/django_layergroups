@@ -188,14 +188,19 @@ def layer_detail(request, workspace, datastore, layer_name):
 
     elif request.method == "PUT":
         try:
-            # Extract the new name from the request payload
+            # Extract the modification details from the request payload
             modification_data = request.data
-            if "name" not in modification_data:
+
+            if not modification_data:
+                return Response({"error": "The request payload is required."}, status=status.HTTP_400_BAD_REQUEST)
+
+            # Extract fields from the payload
+            new_name = modification_data.get("name")
+            new_title = modification_data.get("title")
+            updated_attributes = modification_data.get("attributes", [])
+
+            if not new_name:
                 return Response({"error": "The 'name' field is required."}, status=status.HTTP_400_BAD_REQUEST)
-
-            new_name = modification_data["name"]
-            new_title = modification_data["title"]
-
 
             # Construct the URL for the specific feature type
             feature_url = f"{BASE_LAYER_URL}/{layer_name}.json"
@@ -205,23 +210,57 @@ def layer_detail(request, workspace, datastore, layer_name):
             response.raise_for_status()
             current_feature_type = response.json()["featureType"]
 
-            # Update only the name of the layer
+            # Get existing attributes
+            existing_attributes = current_feature_type.get("attributes", {}).get("attribute", [])
+            if isinstance(existing_attributes, dict):
+                existing_attributes = [existing_attributes]
+
+            # Prepare the attributes for the update
+            updated_attribute_list = []
+            for attr in existing_attributes:
+                # Check if the attribute needs to be updated
+                updated_attr = next((a for a in updated_attributes if a["name"] == attr["name"]), None)
+                if updated_attr:
+                    # Update the attribute's type or other fields if specified
+                    updated_attribute_list.append({
+                        "name": updated_attr.get("new_name", attr["name"]),  # Use the new name if provided
+                        "binding": updated_attr.get("binding", attr["binding"]),  # Use the new type if provided
+                        "minOccurs": attr.get("minOccurs", 0),
+                        "maxOccurs": attr.get("maxOccurs", 1),
+                        "nillable": attr.get("nillable", True),
+                    })
+                else:
+                    # Keep the attribute unchanged
+                    updated_attribute_list.append(attr)
+
+            # Add any completely new attributes from the payload
+            for new_attr in updated_attributes:
+                if new_attr["name"] not in [attr["name"] for attr in existing_attributes]:
+                    updated_attribute_list.append({
+                        "name": new_attr["name"],
+                        "binding": new_attr["binding"],
+                        "minOccurs": new_attr.get("minOccurs", 0),
+                        "maxOccurs": new_attr.get("maxOccurs", 1),
+                        "nillable": new_attr.get("nillable", True),
+                    })
+
+            # Construct the updated payload
             updated_feature_type = {
                 "featureType": {
                     "name": new_name,
                     "nativeName": current_feature_type["nativeName"],  # Keep nativeName unchanged
-                    "title": new_title,  # Update title if it matches the previous name
+                    "title": new_title if new_title else current_feature_type.get("title", new_name),  # Update title if provided
                     "srs": current_feature_type["srs"],
                     "nativeBoundingBox": current_feature_type["nativeBoundingBox"],
                     "latLonBoundingBox": current_feature_type["latLonBoundingBox"],
-                    "attributes": current_feature_type["attributes"],  # Keep attributes unchanged
+                    "attributes": {"attribute": updated_attribute_list},  # Add or update attributes
                 }
             }
 
             # Send PUT request to update the layer
             update_response = requests.put(feature_url, json=updated_feature_type, headers=HEADERS, auth=AUTH)
             if update_response.status_code in (200, 204):
-                return Response({"message": "Layer name updated successfully."}, status=status.HTTP_200_OK)
+                return Response({"message": "Layer updated successfully."}, status=status.HTTP_200_OK)
             else:
                 return Response(
                     {"error": update_response.json() if update_response.headers.get("Content-Type") == "application/json" else update_response.text},
@@ -230,5 +269,7 @@ def layer_detail(request, workspace, datastore, layer_name):
 
         except requests.RequestException as e:
             return Response({"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+
 
 
