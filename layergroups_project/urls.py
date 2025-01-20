@@ -5,4 +5,5 @@ urlpatterns = [
     path("admin/", admin.site.urls),
     path("geoserver/", include("geoserver_app.urls")),
     path("layers/", include("layers.urls")),
+    path("api/", include("table_api.urls")),
 ]
