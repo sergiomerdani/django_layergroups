@@ -7,11 +7,21 @@ AUTH = ("admin", "geoserver")
 HEADERS = {"Accept": "application/json", "Content-Type": "application/json"}
 
 
+GEOSERVER_SETTINGS = {
+    "url": "http://localhost:8080/geoserver",
+    "workspace": "finiq_ws",
+    "datastore": "finiqi_data",
+    "auth": ("admin", "geoserver"),  # Replace with your credentials
+}
+
 def construct_base_layer_url(workspace, datastore):
     """
     Construct the base URL for GeoServer featuretypes.
     """
     return f"http://localhost:8080/geoserver/rest/workspaces/{workspace}/datastores/{datastore}/featuretypes"
+
+
+
 
 
 @api_view(["GET", "POST"])
@@ -67,6 +77,7 @@ def layer_list(request, workspace, datastore):
                         "org.locationtech.jts.geom.MultiPoint": "MultiPoint",
                         "org.locationtech.jts.geom.MultiLineString": "MultiLine",
                         "org.locationtech.jts.geom.MultiPolygon": "MultiPolygon",
+                        "org.locationtech.jts.geom.Geometry": "Geometry",
                     }
                     geometry_type = geometry_mapping.get(geometry_binding, "Unknown Geometry Type")
                 else:
@@ -106,7 +117,10 @@ def layer_list(request, workspace, datastore):
                 "Polygon": "org.locationtech.jts.geom.Polygon",
                 "MultiPoint": "org.locationtech.jts.geom.MultiPoint",
                 "MultiLineString": "org.locationtech.jts.geom.MultiLineString",
-                "MultiPolygon": "org.locationtech.jts.geom.MultiPolygon"
+                "MultiPolygon": "org.locationtech.jts.geom.MultiPolygon",
+                "Geometry": "org.locationtech.jts.geom.Geometry",
+                
+                
             }
 
             geometry_binding = geometry_mapping.get(feature_data["geometry"])
@@ -146,7 +160,6 @@ def layer_list(request, workspace, datastore):
             # Debug response
             print("Response Status Code:", response.status_code)
             print("Response Text:", response.text)
-
             if response.status_code in (200, 201):
                 return Response({"message": "Feature type created successfully."}, status=status.HTTP_201_CREATED)
             else:
@@ -157,8 +170,6 @@ def layer_list(request, workspace, datastore):
 
         except requests.RequestException as e:
             return Response({"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
-
-
 
 
 
@@ -269,6 +280,7 @@ def layer_detail(request, workspace, datastore, layer_name):
 
         except requests.RequestException as e:
             return Response({"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
 
 
 
