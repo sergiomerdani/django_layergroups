@@ -2,5 +2,5 @@ from django.urls import path
 from .views import GeoStyleView
 
 urlpatterns = [
-    path('create-style/', GeoStyleView.as_view(), name='create_style'),
+    path('allstyles/', GeoStyleView.as_view(), name='create_style'),
 ]

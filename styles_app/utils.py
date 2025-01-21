@@ -1,29 +1,50 @@
 import requests
 
+geoserver_url = "http://localhost:8080/geoserver/rest"
+auth = ('admin', 'geoserver')  # Replace with actual credentials
+
 def create_geoserver_style(style_data):
-    geoserver_url = "http://localhost:8080/geoserver/rest/styles"
-    auth = ('admin', 'geoserver')  # Replace with actual credentials
-    sld_body = generate_sld(style_data)  # Generate SLD based on style_data
+    """
+    Create a style in GeoServer using REST API.
+    """
+    if "name" not in style_data:
+        raise ValueError("The 'name' field is required.")
+    if "style_type" not in style_data:
+        raise ValueError("The 'style_type' field is required.")
 
-    headers = {
-        'Content-Type': 'application/vnd.ogc.sld+xml'
-    }
+    sld_body = generate_sld(style_data)  # Generate SLD dynamically
 
+    headers = {'Content-Type': 'application/vnd.ogc.sld+xml'}
     response = requests.post(
-        geoserver_url,
+        f"{geoserver_url}/styles",
         auth=auth,
-        params={'name': style_data['name']},  # Style name as a query param
+        params={'name': style_data['name']},
         data=sld_body,
         headers=headers
     )
 
-    if response.status_code in [200, 201]:  # GeoServer returns 201 for created
+    if response.status_code in [200, 201]:
         return {'success': True}
     else:
         return {'success': False, 'message': response.text}
 
+
+def list_geoserver_styles():
+    """
+    Fetch all styles from GeoServer.
+    """
+    response = requests.get(f"{geoserver_url}/styles.json", auth=auth)
+    if response.status_code == 200:
+        styles = response.json().get("styles", {}).get("style", [])
+        return {'success': True, 'data': styles}
+    else:
+        return {'success': False, 'message': response.text}
+
+
 def generate_sld(style_data):
-    # Generate an SLD string dynamically based on style_data
+    """
+    Dynamically generate SLD XML based on style data.
+    """
     style_type = style_data.get("style_type")
     name = style_data.get("name")
     fill_color = style_data.get("fill_color", "#000000")
@@ -56,7 +77,6 @@ def generate_sld(style_data):
             </NamedLayer>
         </StyledLayerDescriptor>
         """
-    # Add cases for 'line' and 'point' styles
     elif style_type == "line":
         return f"""<?xml version="1.0" encoding="UTF-8"?>
         <StyledLayerDescriptor version="1.0.0" xmlns="http://www.opengis.net/sld">
