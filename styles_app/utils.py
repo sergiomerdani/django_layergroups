@@ -1,6 +1,5 @@
 # utils.py
 import requests
-import json
 
 GEOSERVER_BASE_URL = "http://localhost:8080/geoserver/rest/workspaces/finiq_ws"
 AUTH = ("admin", "geoserver")  # Replace with your GeoServer credentials
