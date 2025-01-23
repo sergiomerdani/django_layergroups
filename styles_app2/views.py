@@ -61,15 +61,18 @@ def style_detail_view(request, style_name):
             return Response({"error": str(err)}, status=500)
 
     elif request.method == "PUT":
-        sld_body = request.data.get("sld_body", None)
-        if not sld_body:
-            return Response({"error": "Missing 'sld_body' to update style."}, status=400)
+    # Expecting JSON payload
+        style_data = request.data
 
         try:
-            update_style(style_name, sld_body)
-            return Response({"message": "Style updated successfully"})
-        except requests.exceptions.HTTPError as err:
-            return Response({"error": str(err)}, status=500)
+            # Update the style using the JSON data
+            geoserver_response = update_style(style_name, style_data)
+            if geoserver_response["success"]:
+                return Response({"message": geoserver_response["message"]}, status=status.HTTP_200_OK)
+            else:
+                return Response({"error": geoserver_response["message"]}, status=status.HTTP_400_BAD_REQUEST)
+        except ValueError as e:
+            return Response({"error": str(e)}, status=status.HTTP_400_BAD_REQUEST)
 
     elif request.method == "DELETE":
         try:

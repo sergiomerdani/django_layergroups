@@ -136,15 +136,25 @@ def generate_sld(style_data):
     else:
         raise ValueError("Invalid style type. Must be 'point', 'line', or 'polygon'.")
 
-def update_style(style_name, sld_body):
+def update_style(style_name, style_data):
     """
-    Update (replace) the SLD content of an existing style.
+    Update (replace) the style content of an existing style using JSON data.
     """
+    # Convert JSON payload to SLD
+    sld_body = generate_sld(style_data)  # Dynamically generate the SLD based on the JSON input
+
+    # Prepare GeoServer REST API URL
     url = f"{GEOSERVER_BASE_URL}/styles/{style_name}"
-    headers = {"Content-type": "application/vnd.ogc.sld+xml"}
+    headers = {"Content-Type": "application/vnd.ogc.sld+xml"}
+
+    # Send the updated SLD to GeoServer
     response = requests.put(url, auth=AUTH, headers=headers, data=sld_body)
-    response.raise_for_status()
-    return True
+    
+    # Handle response
+    if response.status_code in [200, 201]:
+        return {"success": True, "message": "Style updated successfully"}
+    else:
+        return {"success": False, "message": response.text}
 
 def delete_style(style_name):
     """
