@@ -4,91 +4,12 @@ from rest_framework import status
 import requests
 
 BASE_URL = "http://localhost:8080/geoserver/rest/layergroups"
+BASE_URL2 = "http://localhost:8080/geoserver/rest/layers"
 AUTH = ("admin", "geoserver")  # Replace with your credentials
 HEADERS = {"Accept": "application/json", "Content-Type": "application/json"}
 
 @api_view(["GET", "POST"])
 def layergroup_list(request):
-    """
-    GET: Fetch all layer groups with their layers.
-    POST: Create a new layer group.
-    """
-    if request.method == "GET":
-        # Fetch the list of all layer groups
-        response = requests.get(BASE_URL, headers=HEADERS, auth=AUTH)
-        if response.status_code != 200:
-            return Response({"error": "Failed to fetch layer groups."}, status=response.status_code)
-        
-        # Parse the response JSON to get the list of layer groups
-        layer_groups = response.json().get("layerGroups", {}).get("layerGroup", [])
-        
-        detailed_layer_groups = []
-        for layer_group in layer_groups:
-            # Fetch details of each layer group to get its layers
-            layer_group_url = f"{BASE_URL}/{layer_group['name']}"
-            detail_response = requests.get(layer_group_url, headers=HEADERS, auth=AUTH)
-            
-            if detail_response.status_code == 200:
-                layer_group_details = detail_response.json()
-
-                # Extract layers from the 'publishables' field
-                publishables = layer_group_details["layerGroup"].get("publishables", {}).get("published", [])
-                
-                # Ensure 'published' is always a list (GeoServer might return a single dictionary if there's only one layer)
-                if isinstance(publishables, dict):
-                    publishables = [publishables]
-
-                # Extract the layer names from the publishables
-                layers = [pub.get("name") for pub in publishables if pub.get("@type") == "layer"]
-
-                detailed_layer_groups.append({
-                    "name": layer_group["name"],
-                    "layers": layers  # Include only the extracted layers
-                })
-            else:
-                detailed_layer_groups.append({
-                    "name": layer_group["name"],
-                    "error": "Failed to fetch layers."
-                })
-
-
-        return Response(detailed_layer_groups, status=status.HTTP_200_OK)
-
-    elif request.method == "POST":
-        # Extract parameters from the request data
-        name = request.data.get("name")
-        layer = request.data.get("layer")
-
-        # Validate the parameters
-        if not all([name, layer]):
-            return Response(
-                {"error": "Missing required parameters: 'name' or 'layer'"},
-                status=status.HTTP_400_BAD_REQUEST
-            )
-
-        # Build the GeoServer payload
-        payload = {
-            "layerGroup": {
-                "name": name,
-                "layers": {
-                    "layer": [layer]  # Ensure layer is sent as an array
-                },
-                "bounds": {
-                    "minx": 126530.81806662556,
-                    "maxx": 4427129.1730813645,
-                    "miny": 699492.3966753744,
-                    "maxy": 4701182.713534636,
-                    "crs": "EPSG:6870"
-                }
-            }
-        }
-
-        # Send the payload to GeoServer
-        response = requests.post(BASE_URL, json=payload, headers=HEADERS, auth=AUTH)
-        if response.status_code in (200, 201):
-            return Response({"message": "Layer group created successfully."}, status=status.HTTP_201_CREATED)
-        return Response({"error": response.text}, status=response.status_code)
-
     """
     GET: Fetch all layer groups.
     POST: Create a new layer group with parameters (name, layer, style).
@@ -104,12 +25,31 @@ def layergroup_list(request):
         # Extract parameters from the request data
         name = request.data.get("name")
         layer = request.data.get("layer")
-        style = request.data.get("style")
 
-        # Validate the parameters
-        if not all([name, layer, style]):
+        # Validate the required parameters
+        if not all([name, layer]):
             return Response(
-                {"error": "Missing required parameters: 'name', 'layer', or 'style'"},
+                {"error": "Missing required parameters: 'name' or 'layer'"},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        # Fetch the layer details to get the associated style
+        layer_url = f"{BASE_URL2}/{layer}.json"  # URL to fetch layer details
+        layer_response = requests.get(layer_url, headers=HEADERS, auth=AUTH)
+        print(layer_url)
+        if layer_response.status_code != 200:
+            return Response(
+                {"error": f"Failed to fetch layer details for '{layer}'."},
+                status=layer_response.status_code
+            )
+
+        # Extract the default style from the layer details
+        layer_data = layer_response.json()
+        default_style = layer_data.get("layer", {}).get("defaultStyle", {}).get("name")
+
+        if not default_style:
+            return Response(
+                {"error": f"Layer '{layer}' does not have an associated default style."},
                 status=status.HTTP_400_BAD_REQUEST
             )
 
@@ -121,7 +61,7 @@ def layergroup_list(request):
                     "layer": [layer]
                 },
                 "styles": {
-                    "style": [style]
+                    "style": [default_style]  # Automatically fetched style
                 },
                 "bounds": {
                     "minx": 126530.81806662556,
@@ -138,6 +78,7 @@ def layergroup_list(request):
         if response.status_code in (200, 201):
             return Response({"message": "Layer group created successfully."}, status=status.HTTP_201_CREATED)
         return Response({"error": response.text}, status=response.status_code)
+
 
 
 @api_view(["GET", "PUT", "DELETE"])
