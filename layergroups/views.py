@@ -24,44 +24,57 @@ def layergroup_list(request):
     elif request.method == "POST":
         # Extract parameters from the request data
         name = request.data.get("name")
-        layer = request.data.get("layer")
+        layers = request.data.get("layer")  # Can be a single layer (string) or multiple layers (list)
 
         # Validate the required parameters
-        if not all([name, layer]):
+        if not all([name, layers]):
             return Response(
                 {"error": "Missing required parameters: 'name' or 'layer'"},
                 status=status.HTTP_400_BAD_REQUEST
             )
 
-        # Fetch the layer details to get the associated style
-        layer_url = f"{BASE_URL2}/{layer}.json"  # URL to fetch layer details
-        layer_response = requests.get(layer_url, headers=HEADERS, auth=AUTH)
-        print(layer_url)
-        if layer_response.status_code != 200:
-            return Response(
-                {"error": f"Failed to fetch layer details for '{layer}'."},
-                status=layer_response.status_code
-            )
+        # Ensure layers is a list (handle the case where it's a single string)
+        if isinstance(layers, str):
+            layers = [layers]
 
-        # Extract the default style from the layer details
-        layer_data = layer_response.json()
-        default_style = layer_data.get("layer", {}).get("defaultStyle", {}).get("name")
+        # Initialize lists for layers and styles
+        layer_list = []
+        style_list = []
 
-        if not default_style:
-            return Response(
-                {"error": f"Layer '{layer}' does not have an associated default style."},
-                status=status.HTTP_400_BAD_REQUEST
-            )
+        # Fetch styles for each layer
+        for layer in layers:
+            layer_url = f"{BASE_URL2}/{layer}.json"  # URL to fetch layer details
+            layer_response = requests.get(layer_url, headers=HEADERS, auth=AUTH)
+
+            if layer_response.status_code != 200:
+                return Response(
+                    {"error": f"Failed to fetch layer details for '{layer}'."},
+                    status=layer_response.status_code
+                )
+
+            # Extract the default style for the layer
+            layer_data = layer_response.json()
+            default_style = layer_data.get("layer", {}).get("defaultStyle", {}).get("name")
+
+            if not default_style:
+                return Response(
+                    {"error": f"Layer '{layer}' does not have an associated default style."},
+                    status=status.HTTP_400_BAD_REQUEST
+                )
+
+            # Add the layer and its style to the lists
+            layer_list.append(layer)
+            style_list.append(default_style)
 
         # Build the payload for GeoServer
         payload = {
             "layerGroup": {
                 "name": name,
                 "layers": {
-                    "layer": [layer]
+                    "layer": layer_list  # List of layers
                 },
                 "styles": {
-                    "style": [default_style]  # Automatically fetched style
+                    "style": style_list  # List of styles corresponding to the layers
                 },
                 "bounds": {
                     "minx": 126530.81806662556,
@@ -78,6 +91,7 @@ def layergroup_list(request):
         if response.status_code in (200, 201):
             return Response({"message": "Layer group created successfully."}, status=status.HTTP_201_CREATED)
         return Response({"error": response.text}, status=response.status_code)
+
 
 
 
