@@ -1,7 +1,27 @@
+# utils.py
 import requests
+import json
 
-geoserver_url = "http://localhost:8080/geoserver/rest"
-auth = ('admin', 'geoserver')  # Replace with actual credentials
+GEOSERVER_BASE_URL = "http://localhost:8080/geoserver/rest/workspaces/finiq_ws"
+AUTH = ("admin", "geoserver")  # Replace with your GeoServer credentials
+
+def list_styles():
+    """
+    Retrieve a list of all styles on the GeoServer.
+    """
+    url = f"{GEOSERVER_BASE_URL}/styles.json"
+    response = requests.get(url, auth=AUTH)
+    response.raise_for_status()
+    return response.json()
+
+def get_style(style_name):
+    """
+    Retrieve details of a specific style by name.
+    """
+    url = f"{GEOSERVER_BASE_URL}/styles/{style_name}.json"
+    response = requests.get(url, auth=AUTH)
+    response.raise_for_status()
+    return response.json()
 
 def create_geoserver_style(style_data):
     """
@@ -16,8 +36,8 @@ def create_geoserver_style(style_data):
 
     headers = {'Content-Type': 'application/vnd.ogc.sld+xml'}
     response = requests.post(
-        f"{geoserver_url}/styles",
-        auth=auth,
+        f"{GEOSERVER_BASE_URL}/styles",
+        auth=AUTH,
         params={'name': style_data['name']},
         data=sld_body,
         headers=headers
@@ -27,19 +47,6 @@ def create_geoserver_style(style_data):
         return {'success': True}
     else:
         return {'success': False, 'message': response.text}
-
-
-def list_geoserver_styles():
-    """
-    Fetch all styles from GeoServer.
-    """
-    response = requests.get(f"{geoserver_url}/styles.json", auth=auth)
-    if response.status_code == 200:
-        styles = response.json().get("styles", {}).get("style", [])
-        return {'success': True, 'data': styles}
-    else:
-        return {'success': False, 'message': response.text}
-
 
 def generate_sld(style_data):
     """
@@ -128,3 +135,22 @@ def generate_sld(style_data):
         """
     else:
         raise ValueError("Invalid style type. Must be 'point', 'line', or 'polygon'.")
+
+def update_style(style_name, sld_body):
+    """
+    Update (replace) the SLD content of an existing style.
+    """
+    url = f"{GEOSERVER_BASE_URL}/styles/{style_name}"
+    headers = {"Content-type": "application/vnd.ogc.sld+xml"}
+    response = requests.put(url, auth=AUTH, headers=headers, data=sld_body)
+    response.raise_for_status()
+    return True
+
+def delete_style(style_name):
+    """
+    Delete a style by name.
+    """
+    url = f"{GEOSERVER_BASE_URL}/styles/{style_name}"
+    response = requests.delete(url, auth=AUTH)
+    response.raise_for_status()
+    return True
