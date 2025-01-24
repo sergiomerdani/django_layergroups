@@ -139,9 +139,9 @@ def layer_list(request, workspace, datastore):
                         "maxx": 180,
                         "miny": -90,
                         "maxy": 90,
-                        "crs": "EPSG:4326"
+                        "crs": "EPSG:3857"
                     },
-                    "srs": "EPSG:4326",
+                    "srs": "EPSG:3857",
                     "attributes": {
                         "attribute": [
                             {"name": "id", "binding": "java.lang.Integer"},
