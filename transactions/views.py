@@ -287,3 +287,66 @@ class ModifyFeatureAPIView(APIView):
             """
         else:
             raise ValueError("Unsupported geometry type")
+        
+        
+class UpdateFeatureAttributesAPIView(APIView):
+    def post(self, request, *args, **kwargs):
+        # Extract parameters from the request payload
+        layer_name = request.data.get("layerName")  # Layer name (e.g., workspace:layer)
+        feature_id = request.data.get("featureID")  # ID of the feature to update
+        properties = request.data.get("properties")  # Dictionary of attributes to update
+        host = request.data.get("host", "localhost")  # Default to localhost if not provided
+
+        if not (layer_name and feature_id and properties):
+            return Response(
+                {"error": "Missing required parameters: layerName, featureID, or properties"},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        # Generate the WFS Update Transaction XML
+        try:
+            wfs_transaction = self.generate_wfs_update_transaction(layer_name, feature_id, properties)
+        except ValueError as e:
+            return Response({"error": str(e)}, status=status.HTTP_400_BAD_REQUEST)
+
+        # Send the WFS Transaction request to GeoServer
+        geoserver_url = f"http://{host}:8080/geoserver/ows"
+        headers = {"Content-Type": "text/xml"}
+
+        try:
+            response = requests.post(geoserver_url, data=wfs_transaction, headers=headers)
+            if response.status_code == 200:
+                return Response({"message": "Feature attributes updated successfully", "details": response.text}, status=status.HTTP_200_OK)
+            else:
+                return Response({"error": "GeoServer error", "details": response.text}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+        except Exception as e:
+            return Response({"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+    def generate_wfs_update_transaction(self, layer_name, feature_id, properties):
+        # Start the WFS Update Transaction XML
+        transaction_xml = f"""
+        <wfs:Transaction service="WFS" version="1.0.0"
+        xmlns:topp="http://www.openplans.org/topp"
+        xmlns:ogc="http://www.opengis.net/ogc"
+        xmlns:wfs="http://www.opengis.net/wfs">
+            <wfs:Update typeName="{layer_name}">
+        """
+        # Add properties to the XML
+        for key, value in properties.items():
+            if key == "id":  # Skip the "id" field
+                continue
+            transaction_xml += f"""
+                <wfs:Property>
+                    <wfs:Name>{key}</wfs:Name>
+                    <wfs:Value>{value}</wfs:Value>
+                </wfs:Property>
+            """
+        # Add the filter for the feature ID
+        transaction_xml += f"""
+                <ogc:Filter>
+                    <ogc:FeatureId fid="{feature_id}"/>
+                </ogc:Filter>
+            </wfs:Update>
+        </wfs:Transaction>
+        """
+        return transaction_xml
