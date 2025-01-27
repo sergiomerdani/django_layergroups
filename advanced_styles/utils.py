@@ -31,17 +31,28 @@ def create_geoserver_style(style_data):
 
 def generate_advanced_sld(style_data):
     """
-    Generate SLD XML (1.0.0) with proper colors and labels.
+    Generate SLD XML (1.0.0) with proper colors and labels for polygon, line, and point types.
     """
     style_name = style_data.get("name", "default_style")
     layer_name = style_data.get("layer_name", "default_layer")
-    fill_color = style_data.get("fill_color", "#FFFFFF")  # Default to white
+    style_type = style_data.get("style_type", "polygon")  # Default to polygon
+
+    # Shared parameters
     stroke_color = style_data.get("stroke_color", "#000000")  # Default to black
     stroke_width = style_data.get("stroke_width", 1)
+    stroke_opacity = style_data.get("stroke_opacity", 1)  # Used for line and point types
     label_field = style_data.get("label_field")
     font_family = style_data.get("font_family", "Serif")
     font_size = style_data.get("font_size", 10)
     font_color = style_data.get("font_color", "#000000")
+
+    # Polygon-specific parameters
+    fill_color = style_data.get("fill_color", "#FFFFFF")  # Default to white
+    fill_opacity = style_data.get("fill_opacity", 1)
+
+    # Point-specific parameters
+    point_size = style_data.get("point_size", 10)  # Default size for point symbols
+    point_shape = style_data.get("point_shape", "circle")  # Default shape is a circle
 
     # Base SLD structure
     sld_header = f"""
@@ -56,21 +67,56 @@ def generate_advanced_sld(style_data):
                 <sld:FeatureTypeStyle>
                     <sld:Rule>
                         <sld:Name>Single symbol</sld:Name>
+    """
+
+    # Style-specific symbolizer
+    if style_type == "polygon":
+        sld_header += f"""
                         <sld:PolygonSymbolizer>
                             <sld:Fill>
                                 <sld:CssParameter name="fill">{fill_color}</sld:CssParameter>
+                                <sld:CssParameter name="fill-opacity">{fill_opacity}</sld:CssParameter>
                             </sld:Fill>
                             <sld:Stroke>
                                 <sld:CssParameter name="stroke">{stroke_color}</sld:CssParameter>
                                 <sld:CssParameter name="stroke-width">{stroke_width}</sld:CssParameter>
                             </sld:Stroke>
                         </sld:PolygonSymbolizer>
-                    </sld:Rule>
-    """
+        """
+    elif style_type == "line":
+        sld_header += f"""
+                        <sld:LineSymbolizer>
+                            <sld:Stroke>
+                                <sld:CssParameter name="stroke">{stroke_color}</sld:CssParameter>
+                                <sld:CssParameter name="stroke-width">{stroke_width}</sld:CssParameter>
+                                <sld:CssParameter name="stroke-opacity">{stroke_opacity}</sld:CssParameter>
+                            </sld:Stroke>
+                        </sld:LineSymbolizer>
+        """
+    elif style_type == "point":
+        sld_header += f"""
+                        <sld:PointSymbolizer>
+                            <sld:Graphic>
+                                <sld:Mark>
+                                    <sld:WellKnownName>{point_shape}</sld:WellKnownName>
+                                    <sld:Fill>
+                                        <sld:CssParameter name="fill">{fill_color}</sld:CssParameter>
+                                        <sld:CssParameter name="fill-opacity">{fill_opacity}</sld:CssParameter>
+                                    </sld:Fill>
+                                    <sld:Stroke>
+                                        <sld:CssParameter name="stroke">{stroke_color}</sld:CssParameter>
+                                        <sld:CssParameter name="stroke-width">{stroke_width}</sld:CssParameter>
+                                    </sld:Stroke>
+                                </sld:Mark>
+                                <sld:Size>{point_size}</sld:Size>
+                            </sld:Graphic>
+                        </sld:PointSymbolizer>
+        """
 
     # Add label configuration if a label field is provided
     if label_field:
         sld_header += f"""
+                    </sld:Rule>
                     <sld:Rule>
                         <sld:TextSymbolizer>
                             <sld:Label>
@@ -94,11 +140,11 @@ def generate_advanced_sld(style_data):
                                 <sld:CssParameter name="fill">{font_color}</sld:CssParameter>
                             </sld:Fill>
                         </sld:TextSymbolizer>
-                    </sld:Rule>
         """
 
     # Close the SLD structure
     sld_footer = """
+                    </sld:Rule>
                 </sld:FeatureTypeStyle>
             </sld:UserStyle>
         </sld:NamedLayer>
