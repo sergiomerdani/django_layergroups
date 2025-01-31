@@ -9,4 +9,5 @@ urlpatterns = [
     path("styles/", include("styles_app.urls")),
     path("api/", include("transactions.urls")),
     path("api/", include("advanced_styles.urls")),
+    path("layerdata/", include("layerdata.urls")),
 ]
