@@ -33,11 +33,14 @@ def style_detail(request, style_name):
     
     elif request.method == 'PUT':
         try:
-            new_style_data = request.data  # Expecting JSON payload
-            if "name" not in new_style_data:
-                return Response({'success': False, 'message': 'Style name is required'}, status=400)
+                # Get the new style parameters from the request body (JSON payload).
+                new_style_data = request.data
+                
+                # Optionally, force the style name in the payload to match the URL parameter.
+                new_style_data["name"] = style_name
 
-            result = update_geoserver_style_from_json(style_name, new_style_data)
-            return Response(result, status=200 if result['success'] else 400)
+                result = update_geoserver_style_from_json(style_name, new_style_data)
+                status_code = 200 if result.get("success") else 400
+                return Response(result, status=status_code)
         except Exception as e:
-            return Response({'success': False, 'message': str(e)}, status=400)
+            return Response({"success": False, "message": str(e)}, status=400)

@@ -283,43 +283,36 @@ def delete_geoserver_style(style_name):
     
 def update_geoserver_style_from_json(style_name, new_style_data):
     """
-    Update an existing style in GeoServer by:
-    - Switching between single and rule-based styling
-    - Toggling labels on/off
-    - Keeping the geometry type unchanged
+    Update an existing style in GeoServer by completely recreating its SLD
+    from the provided JSON payload. This function generates a new SLD (using
+    generate_sld()) and sends it via a PUT request, effectively replacing the old style.
     """
     try:
-        # Fetch the existing style metadata
-        style_metadata_url = f"{GEOSERVER_BASE_URL}/styles/{style_name}.json"
-        response = requests.get(style_metadata_url, auth=HTTPBasicAuth(*AUTH))
+        # (Optional) If you want to preserve the existing geometry type,
+        # you can fetch the current metadata and then update new_style_data accordingly.
+        metadata_url = f"{GEOSERVER_BASE_URL}/styles/{style_name}.json"
+        response = requests.get(metadata_url, auth=HTTPBasicAuth(*AUTH))
+        if response.status_code == 200:
+            existing_style = response.json().get("style", {})
+            # If the new payload does not include a geometry type, preserve the existing one.
+            if "geometry_type" not in new_style_data or not new_style_data["geometry_type"]:
+                new_style_data["geometry_type"] = existing_style.get("geometry_type", "point")
+        else:
+            print("Warning: Could not fetch existing metadata; proceeding with provided data.")
 
-        if response.status_code != 200:
-            return {"success": False, "message": "Failed to fetch existing style metadata."}
-
-        # Parse existing metadata
-        existing_style_data = response.json().get("style", {})
-        geometry_type = existing_style_data.get("geometry_type")  # Preserve geometry type
-
-        # Ensure geometry type remains unchanged
-        new_style_data["geometry_type"] = geometry_type
-
-        # Generate new SLD based on updated parameters
+        # Generate a brand-new SLD from the update payload.
         sld_body = generate_sld(new_style_data)
-
         if not sld_body:
             return {"success": False, "message": "Generated SLD is empty."}
 
-        # Print new SLD for debugging
-        print(f"Updated SLD for {style_name}:\n{sld_body}")
 
-        # Upload the updated SLD
-        style_url = f"{GEOSERVER_BASE_URL}/styles/{style_name}"
+        # Upload the new SLD to GeoServer (this will completely replace the existing style).
+        update_url = f"{GEOSERVER_BASE_URL}/styles/{style_name}"
         headers = {"Content-Type": "application/vnd.ogc.sld+xml"}
-
-        response = requests.put(style_url, auth=HTTPBasicAuth(*AUTH), data=sld_body, headers=headers)
+        response = requests.put(update_url, auth=HTTPBasicAuth(*AUTH), data=sld_body, headers=headers)
 
         if response.status_code in [200, 201]:
-            return {"success": True, "message": f"Style '{style_name}' updated successfully"}
+            return {"success": True, "message": f"Style '{style_name}' updated successfully."}
         else:
             return {"success": False, "message": response.text}
     except Exception as e:
