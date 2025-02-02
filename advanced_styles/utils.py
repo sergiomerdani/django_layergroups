@@ -1,7 +1,23 @@
 import requests
+from requests.auth import HTTPBasicAuth
 
 GEOSERVER_BASE_URL = "http://localhost:8080/geoserver/rest/workspaces/finiq_ws"
 AUTH = ("admin", "geoserver")  # Replace with your GeoServer credentials
+
+def get_geoserver_styles():
+    """
+    Fetch all styles in the specified GeoServer workspace.
+    """
+    try:
+        styles_url = f"{GEOSERVER_BASE_URL}/styles.json"
+        response = requests.get(styles_url, auth=HTTPBasicAuth(*AUTH))
+
+        if response.status_code == 200:
+            return {"success": True, "data": response.json()}
+        else:
+            return {"success": False, "message": response.text}
+    except Exception as e:
+        return {"success": False, "message": str(e)}
 
 def create_geoserver_style(style_data):
     """
@@ -235,3 +251,76 @@ def generate_sld(style_data):
 
     return sld_header + sld_footer
 
+def get_geoserver_style(style_name):
+    """
+    Fetch details of a specific style in the GeoServer workspace.
+    """
+    try:
+        style_url = f"{GEOSERVER_BASE_URL}/styles/{style_name}.json"
+        response = requests.get(style_url, auth=HTTPBasicAuth(*AUTH))
+
+        if response.status_code == 200:
+            return {"success": True, "data": response.json()}
+        else:
+            return {"success": False, "message": response.text}
+    except Exception as e:
+        return {"success": False, "message": str(e)}
+
+def delete_geoserver_style(style_name):
+    """
+    Delete a specific style from the GeoServer workspace.
+    """
+    try:
+        style_url = f"{GEOSERVER_BASE_URL}/styles/{style_name}"
+        response = requests.delete(style_url, auth=HTTPBasicAuth(*AUTH))
+
+        if response.status_code in [200, 204]:
+            return {"success": True, "message": f"Style '{style_name}' deleted successfully"}
+        else:
+            return {"success": False, "message": response.text}
+    except Exception as e:
+        return {"success": False, "message": str(e)}
+    
+def update_geoserver_style_from_json(style_name, new_style_data):
+    """
+    Update an existing style in GeoServer by:
+    - Switching between single and rule-based styling
+    - Toggling labels on/off
+    - Keeping the geometry type unchanged
+    """
+    try:
+        # Fetch the existing style metadata
+        style_metadata_url = f"{GEOSERVER_BASE_URL}/styles/{style_name}.json"
+        response = requests.get(style_metadata_url, auth=HTTPBasicAuth(*AUTH))
+
+        if response.status_code != 200:
+            return {"success": False, "message": "Failed to fetch existing style metadata."}
+
+        # Parse existing metadata
+        existing_style_data = response.json().get("style", {})
+        geometry_type = existing_style_data.get("geometry_type")  # Preserve geometry type
+
+        # Ensure geometry type remains unchanged
+        new_style_data["geometry_type"] = geometry_type
+
+        # Generate new SLD based on updated parameters
+        sld_body = generate_sld(new_style_data)
+
+        if not sld_body:
+            return {"success": False, "message": "Generated SLD is empty."}
+
+        # Print new SLD for debugging
+        print(f"Updated SLD for {style_name}:\n{sld_body}")
+
+        # Upload the updated SLD
+        style_url = f"{GEOSERVER_BASE_URL}/styles/{style_name}"
+        headers = {"Content-Type": "application/vnd.ogc.sld+xml"}
+
+        response = requests.put(style_url, auth=HTTPBasicAuth(*AUTH), data=sld_body, headers=headers)
+
+        if response.status_code in [200, 201]:
+            return {"success": True, "message": f"Style '{style_name}' updated successfully"}
+        else:
+            return {"success": False, "message": response.text}
+    except Exception as e:
+        return {"success": False, "message": str(e)}

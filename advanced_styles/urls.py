@@ -1,6 +1,7 @@
 from django.urls import path
-from .views import create_style
+from .views import fetch_create_style,style_detail
 
 urlpatterns = [
-    path('create-style/', create_style, name='create_style'),
+    path('advanced-styles/', fetch_create_style, name='fetch_create_style'),
+    path('advanced-styles/<str:style_name>', style_detail, name='style_detail'),
 ]
