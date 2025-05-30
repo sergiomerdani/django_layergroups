@@ -3,7 +3,7 @@ from rest_framework.response import Response
 from rest_framework import status
 import requests
 
-BASE_URL = "http://localhost:8080/geoserver/rest/layergroups"
+BASE_URL = "http://localhost:8080/geoserver/rest/workspaces/test/layergroups"
 BASE_URL2 = "http://localhost:8080/geoserver/rest/layers"
 AUTH = ("admin", "geoserver")  # Replace with your credentials
 HEADERS = {"Accept": "application/json", "Content-Type": "application/json"}
