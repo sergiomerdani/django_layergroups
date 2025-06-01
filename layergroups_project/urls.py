@@ -11,4 +11,6 @@ urlpatterns = [
     path("api/", include("advanced_styles.urls")),
     path("layerdata/", include("layerdata.urls")),
     path("api/", include("users_app.urls")),
+    path("api/", include("users_app.urls")),
+    path("api/", include("groups_app.urls")),
 ]
