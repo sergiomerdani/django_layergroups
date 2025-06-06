@@ -10,13 +10,6 @@ GS_HEADERS_JSON = {"Accept": "application/json"}
 
 @api_view(["GET", "POST"])
 def geoserver_users(request):
-    """
-    GET    /api/users/             → list all users
-    GET    /api/users/?username=X → retrieve user X
-    POST   /api/users/             → create user (JSON: username, password, enabled)
-    PUT    /api/users/             → update user (JSON: username, [password], [enabled])
-    DELETE /api/users/             → delete user (JSON: username)
-    """
     # — LIST or DETAIL
     if request.method == "GET":
         # list all
@@ -134,3 +127,55 @@ def user_detail(request, username):
                 {"error": str(e)},
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR
             )
+            
+# LIST ALL THE GROUPS OF A USER / ADD USER TO A GROUP
+@api_view(["GET", "POST", "PUT"])
+def user_groups(request, username):
+    """
+    GET  /api/users/<username>/groups/ → List all GeoServer groups for a given user
+    POST /api/users/<username>/groups/ → Add <username> to a group (JSON: {"group": "<groupname>"})
+    PUT /api/users/<username>/groups/ → Delete <username> to a group (JSON: {"group": "<groupname>"})
+    """
+    # ─── GET: List groups ───────────────────────────────────────────────────
+    if request.method == "GET":
+        url = f"{GEOSERVER_URL}/rest/security/usergroup/user/{username}/groups.json"
+        resp = requests.get(url, auth=GEOSERVER_AUTH, headers=GS_HEADERS_JSON)
+        if resp.ok:
+            return Response(resp.json(), status=resp.status_code)
+        return Response({"error": resp.text}, status=resp.status_code)
+
+    # ─── POST: Associate user with a group ─────────────────────────────────
+    if request.method == "POST":
+        groupname = request.data.get("group")
+        if not groupname:
+            return Response(
+                {"error": "Missing required field 'group'."},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        # GeoServer endpoint to add a user to a group:
+        # POST /rest/security/usergroup/user/{username}/group/{groupname}
+        url = f"{GEOSERVER_URL}/rest/security/usergroup/user/{username}/group/{groupname}"
+        resp = requests.post(url, auth=GEOSERVER_AUTH, headers={"Content-Type": "text/plain"})
+        if resp.status_code in (200, 201):
+            return Response(
+                {"message": f"User '{username}' added to group '{groupname}'."},
+                status=status.HTTP_200_OK
+            )
+        return Response({"error": resp.text}, status=resp.status_code)
+
+        # ─── DELETE: Unassociate user from a group ───────────────────────────────
+    if request.method == "PUT":
+        groupname = request.data.get("group")
+        if not groupname:
+            return Response({"error": "Missing 'group'."}, status=status.HTTP_400_BAD_REQUEST)
+
+        url = f"{GEOSERVER_URL}/rest/security/usergroup/user/{username}/group/{groupname}"
+        # Even though client sent PUT, we still call GeoServer with DELETE
+        resp = requests.delete(url, auth=GEOSERVER_AUTH)
+        if resp.status_code in (200, 204):
+            return Response(
+                {"message": f"User '{username}' removed from group '{groupname}'."},
+                status=status.HTTP_200_OK
+            )
+        return Response({"error": resp.text}, status=resp.status_code)
