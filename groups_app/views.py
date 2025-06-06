@@ -27,8 +27,6 @@ def geoserver_groups(request):
     # ─── 2) CREATE A NEW GROUP (POST) ─────────────────────────────────────
     if request.method == "POST":
         group_name = request.data.get("groupName")
-        members    = request.data.get("members", [])
-        enabled    = request.data.get("enabled")
 
         if not group_name:
             return Response(
@@ -40,9 +38,7 @@ def geoserver_groups(request):
         body = {
             "group": {
                 "groupName": group_name,
-                "enabled": enabled,
-                # Only include "users" if member list is nonempty
-                **({"users": members} if members else {})
+
             }
         }
 
@@ -62,72 +58,18 @@ def geoserver_groups(request):
             )
         return Response({"error": resp.text}, status=resp.status_code)
     
-@api_view(["GET", "PUT", "DELETE"])
+@api_view(["GET", "DELETE"])
 def geoserver_group_detail(request, groupname):
 
     base_url = f"{GEOSERVER_URL}/rest/security/usergroup/group/{groupname}"
 
     # — GET GROUP DETAILS —
     if request.method == "GET":
-        url  = f"{base_url}.json"
+        url  = f"{base_url}/users.json"
         resp = requests.get(url, auth=GEOSERVER_AUTH, headers=GS_HEADERS_JSON)
         if resp.ok:
             return Response(resp.json(), status=resp.status_code)
-        return Response({"error": "GeoServer does not support GET group detail. Please use list or fetch by filtering."}, status=resp.status_code)
-
-# ─── PUT: Update either "enabled" or "members" (or both) ──────────────
-    if request.method == "PUT":
-        enabled = request.data.get("enabled", None)    # true/false or None
-        members = request.data.get("members", None)    # list of usernames or None
-
-        # If neither field was provided, error out
-        if enabled is None and members is None:
-            return Response(
-                {"error": "Provide at least one of 'enabled' (boolean) or 'members' (list of usernames)."},
-                status=status.HTTP_400_BAD_REQUEST
-            )
-
-        # Build the <group>…</group> block, including only the provided subelements:
-        xml_lines = ["<group>"]
-
-        # 1) If "enabled" was present, include it:
-        if enabled is not None:
-            xml_lines.append(f"  <enabled>{str(enabled).lower()}</enabled>")
-
-        # 2) If "members" was present, include a <users>…</users> block:
-        if members is not None:
-            # We replace the entire member list with exactly what's in "members"
-            xml_lines.append("  <users>")
-            for username in members:
-                xml_lines.append(f"    <user>{username}</user>")
-            xml_lines.append("  </users>")
-
-        xml_lines.append("</group>")
-        xml_payload = "\n".join(xml_lines)
-
-        # GeoServer expects a POST with XML to the .xml URL to update an existing group
-        update_url = f"{base_url}.xml"
-        resp = requests.post(
-            update_url,
-            data=xml_payload,
-            auth=GEOSERVER_AUTH,
-            headers=GS_HEADERS_XML
-        )
-
-        if resp.status_code in (200, 204):
-            # Build a success message indicating what changed
-            changed = []
-            if enabled is not None:
-                changed.append(f"enabled={enabled}")
-            if members is not None:
-                changed.append(f"members={members}")
-            return Response(
-                {"message": f"Group '{groupname}' updated ({', '.join(changed)})."},
-                status=status.HTTP_200_OK
-            )
-
-        # If GeoServer returns an error (e.g. malformed XML), forward it
-        return Response({"error": resp.text}, status=resp.status_code)
+        return Response({"error": "GeoServer does not support GET group detail."}, status=resp.status_code)
 
     # — DELETE GROUP —
     if request.method == "DELETE":
