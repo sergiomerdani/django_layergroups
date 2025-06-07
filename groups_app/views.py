@@ -80,3 +80,17 @@ def geoserver_group_detail(request, groupname):
                 status=status.HTTP_200_OK
             )
         return Response({"error": resp.text}, status=resp.status_code)
+
+# GET GEOSERVER ROLES FOR A GROUP
+@api_view(["GET"])
+def geoserver_roles_for_group(request, groupname):
+    """
+    GET /api/roles/group/<groupname>/ → List all GeoServer roles that include <groupname>
+    """
+    # GeoServer’s endpoint for listing roles assigned to a group:
+    #   /rest/security/roles/groups/{groupname}.json
+    url = f"{GEOSERVER_URL}/rest/security/roles/group/{groupname}.json"
+    resp = requests.get(url, auth=GEOSERVER_AUTH, headers=GS_HEADERS_JSON)
+    if resp.ok:
+        return Response(resp.json(), status=resp.status_code)
+    return Response({"error": resp.text}, status=resp.status_code)
