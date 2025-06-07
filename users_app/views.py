@@ -179,3 +179,16 @@ def user_groups(request, username):
                 status=status.HTTP_200_OK
             )
         return Response({"error": resp.text}, status=resp.status_code)
+
+@api_view(["GET"])
+def geoserver_roles_for_user(request, username):
+    """
+    GET /api/roles/user/<username>/ → List all GeoServer roles assigned to <username>
+    """
+    # GeoServer’s REST endpoint for roles by user:
+    #   GET /rest/security/roles/users/{username}.json
+    url = f"{GEOSERVER_URL}/rest/security/roles/user/{username}.json"
+    resp = requests.get(url, auth=GEOSERVER_AUTH, headers=GS_HEADERS_JSON)
+    if resp.ok:
+        return Response(resp.json(), status=resp.status_code)
+    return Response({"error": resp.text}, status=resp.status_code)
