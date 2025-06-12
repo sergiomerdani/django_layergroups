@@ -62,49 +62,78 @@ def geoserver_masterpw(request):
     return Response({'error': resp.text}, status=resp.status_code)
 
 
+
 @api_view(['GET', 'PUT'])
 def geoserver_self_password(request):
     """
-    GET /api/geoserver/self/password/  
-    → proxies GET (usually 405)
+    GET  /api/geoserver/self/password/  
+      → proxies GET (usually 405 Method Not Allowed)
 
-    PUT /api/geoserver/self/password/  
-    Body: { "newPassword": "..." }
-    → proxies PUT and then triggers a reload
+    PUT  /api/geoserver/self/password/  
+      Body JSON: {
+        "oldPassword":     "<current-pw>",
+        "newPassword":     "<desired-new-pw>"
+      }
+      → proxies PUT, validates the old password, and then triggers a reload
     """
-    url = f"{GEOSERVER_URL}/rest/security/self/password"
+    url     = f"{GEOSERVER_URL}/rest/security/self/password"
     headers = {'Accept': 'application/json'}
 
+    # ─── GET branch ─────────────────────────────────────────────────────────
     if request.method == 'GET':
-        resp = requests.get(url,
-                            auth=(GEOSERVER_USER, GEOSERVER_PASS),
-                            headers=headers)
+        resp = requests.get(
+            url,
+            auth=(GEOSERVER_USER, GEOSERVER_PASS),
+            headers=headers
+        )
+        # 401 from GeoServer → custom message
+        if resp.status_code == 401:
+            return Response(
+                {'error': 'Please check username or password.'},
+                status=status.HTTP_401_UNAUTHORIZED
+            )
+        # 200 → return JSON or raw text
         if resp.status_code == 200:
             try:
                 return Response(resp.json(), status=200)
             except ValueError:
                 return Response({'response': resp.text}, status=200)
+        # other errors → bubble up
         return Response({'error': resp.text}, status=resp.status_code)
 
-    # PUT → change your password
+    # ─── PUT branch ─────────────────────────────────────────────────────────
+    old_pw = request.data.get('oldPassword')
     new_pw = request.data.get('newPassword')
-    if not new_pw:
+
+    # 1) require both old and new
+    if not old_pw or not new_pw:
         return Response(
-            {'error': "Missing required field 'newPassword'."},
+            {'error': "Both 'oldPassword' and 'newPassword' are required."},
             status=status.HTTP_400_BAD_REQUEST
         )
 
+    # 2) attempt to change, authenticating with the old password
     headers['Content-Type'] = 'application/json'
-    resp = requests.put(url,
-                        auth=(GEOSERVER_USER, GEOSERVER_PASS),
-                        headers=headers,
-                        json={'newPassword': new_pw})
+    resp = requests.put(
+        url,
+        auth=(GEOSERVER_USER, old_pw),
+        headers=headers,
+        json={'newPassword': new_pw}
+    )
 
+    # 3) wrong old password?
+    if resp.status_code == 401:
+        return Response(
+            {'error': 'Please check username or existing password.'},
+            status=status.HTTP_401_UNAUTHORIZED
+        )
+
+    # 4) on success, trigger a config reload so REST auth picks up the new pw
     if resp.status_code == 200:
-        # **force a reload** so REST auth picks up the new password immediately
-        reload_url = f"{GEOSERVER_URL}/rest/reload"
-        reload_resp = requests.post(reload_url,
-                                    auth=(GEOSERVER_USER, GEOSERVER_PASS))
+        reload_resp = requests.post(
+            f"{GEOSERVER_URL}/rest/reload",
+            auth=(GEOSERVER_USER, old_pw)
+        )
         if reload_resp.status_code in (200, 204):
             return Response(
                 {'message': 'Password changed and GeoServer reloaded.'},
@@ -113,10 +142,12 @@ def geoserver_self_password(request):
         else:
             return Response(
                 {
-                'message': 'Password changed, but reload failed.',
-                'reload_error': reload_resp.text
+                    'message': 'Password changed, but reload failed.',
+                    'reload_error': reload_resp.text
                 },
                 status=status.HTTP_200_OK
             )
 
-    return Response({'error': "Please check username or password."}, status=resp.status_code)
+    # 5) any other GeoServer error → pass it along
+    return Response({'error': resp.text}, status=resp.status_code)
+
