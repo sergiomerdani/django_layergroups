@@ -31,9 +31,9 @@ def geoserver_users(request):
             )
         xml = f"""
         <user>
-          <userName>{username}</userName>
-          <password>{password}</password>
-          <enabled>{enabled}</enabled>
+        <userName>{username}</userName>
+        <password>{password}</password>
+        <enabled>{enabled}</enabled>
         </user>
         """.strip()
         url  = f"{GEOSERVER_URL}/rest/security/usergroup/users"
