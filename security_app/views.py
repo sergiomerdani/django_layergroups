@@ -5,8 +5,12 @@ import requests
 
 # assume in settings.py you have
 GEOSERVER_URL = 'http://localhost:8080/geoserver'
-GEOSERVER_USER = 'user_reader'
+GEOSERVER_USER = 'admin'
 GEOSERVER_PASS = 'geoserver'
+GS_HEADERS = {
+    'Accept': 'application/json',
+    'Content-Type': 'application/json'
+}
 
 @api_view(['GET', 'PUT'])
 def geoserver_masterpw(request):
@@ -151,3 +155,41 @@ def geoserver_self_password(request):
     # 5) any other GeoServer error → pass it along
     return Response({'error': resp.text}, status=resp.status_code)
 
+
+
+@api_view(['GET', 'POST'])
+def geoserver_acl_layers(request):
+    """
+GET  /api/geoserver/acl/layers/ 
+    → proxies GET to GeoServer /rest/security/acl/layers
+
+POST /api/geoserver/acl/layers/
+    Body: {
+    "rule": {
+        "@resource": "string",
+        "text": "string"
+    }
+    }
+    → proxies POST to GeoServer /rest/security/acl/layers
+"""
+    url = f"{GEOSERVER_URL}/rest/security/acl/layers"
+    auth = (GEOSERVER_USER, GEOSERVER_PASS)
+
+    if request.method == 'GET':
+        resp = requests.get(url, auth=auth, headers=GS_HEADERS)
+        if resp.ok:
+            try:
+                return Response(resp.json(), status=resp.status_code)
+            except ValueError:
+                return Response({'response': resp.text}, status=resp.status_code)
+        return Response({'error': resp.text}, status=resp.status_code)
+
+    # POST → create a new layer ACL rule
+    payload = request.data
+    resp = requests.post(url, auth=auth, headers=GS_HEADERS, json=payload)
+    if resp.ok:
+        try:
+            return Response(resp.json(), status=resp.status_code)
+        except ValueError:
+            return Response({'response': 'Rule Successfully created!'}, status=resp.status_code)
+    return Response({'error': resp.text}, status=resp.status_code)
