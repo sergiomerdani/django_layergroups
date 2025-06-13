@@ -157,24 +157,17 @@ def geoserver_self_password(request):
 
 
 
-@api_view(['GET', 'POST'])
+@api_view(['GET', 'POST', 'PUT'])
 def geoserver_acl_layers(request):
     """
-GET  /api/geoserver/acl/layers/ 
-    → proxies GET to GeoServer /rest/security/acl/layers
-
-POST /api/geoserver/acl/layers/
-    Body: {
-    "rule": {
-        "@resource": "string",
-        "text": "string"
-    }
-    }
-    → proxies POST to GeoServer /rest/security/acl/layers
-"""
-    url = f"{GEOSERVER_URL}/rest/security/acl/layers"
+    GET  → list rules
+    POST → add new rule(s)
+    PUT  → merge & update existing rule(s)
+    """
+    url  = f"{GEOSERVER_URL}/rest/security/acl/layers"
     auth = (GEOSERVER_USER, GEOSERVER_PASS)
 
+    # ─── GET ──────────────────────────────────────────────────────────────────
     if request.method == 'GET':
         resp = requests.get(url, auth=auth, headers=GS_HEADERS)
         if resp.ok:
@@ -184,12 +177,61 @@ POST /api/geoserver/acl/layers/
                 return Response({'response': resp.text}, status=resp.status_code)
         return Response({'error': resp.text}, status=resp.status_code)
 
-    # POST → create a new layer ACL rule
-    payload = request.data
-    resp = requests.post(url, auth=auth, headers=GS_HEADERS, json=payload)
-    if resp.ok:
+    # ─── POST ─────────────────────────────────────────────────────────────────
+    elif request.method == 'POST':
+        payload = request.data
+        resp = requests.post(url, auth=auth, headers=GS_HEADERS, json=payload)
+        if resp.ok:
+            # show a friendly message on empty JSON
+            try:
+                return Response(resp.json(), status=resp.status_code)
+            except ValueError:
+                return Response({'message': 'Rule successfully created!'}, status=resp.status_code)
+        return Response({'error': resp.text}, status=resp.status_code)
+
+    # ─── PUT ──────────────────────────────────────────────────────────────────
+    elif request.method == 'PUT':
+        # 1) fetch existing
+        get_resp = requests.get(url, auth=auth, headers=GS_HEADERS)
+        if not get_resp.ok:
+            return Response(
+                {'error': f"Failed to fetch existing rules: {get_resp.text}"},
+                status=get_resp.status_code
+            )
         try:
-            return Response(resp.json(), status=resp.status_code)
+            current_map = get_resp.json()
         except ValueError:
-            return Response({'response': 'Rule Successfully created!'}, status=resp.status_code)
-    return Response({'error': resp.text}, status=resp.status_code)
+            return Response({'error': 'Could not parse existing rules.'},
+                            status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+        # 2) merge payload
+        data, updated = request.data, []
+        if 'rule' in data:
+            r = data['rule']
+            res, txt = r.get('@resource'), r.get('text')
+            if not res or txt is None:
+                return Response(
+                    {'error': "Both '@resource' and 'text' are required."},
+                    status=status.HTTP_400_BAD_REQUEST
+                )
+            current_map[res] = txt
+            updated = [res]
+        else:
+            for res, txt in data.items():
+                current_map[res] = txt
+                updated.append(res)
+
+        # 3) PUT back
+        put_resp = requests.put(url, auth=auth, headers=GS_HEADERS, json=current_map)
+        if put_resp.ok:
+            return Response(
+                {'message': f"Successfully updated rule(s): {', '.join(updated)}"},
+                status=put_resp.status_code
+            )
+        return Response({'error': put_resp.text}, status=put_resp.status_code)
+
+    # ─── fallback ──────────────────────────────────────────────────────────────
+    return Response(
+        {'error': 'Method not allowed.'},
+        status=status.HTTP_405_METHOD_NOT_ALLOWED
+    )
