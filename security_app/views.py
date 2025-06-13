@@ -235,3 +235,44 @@ def geoserver_acl_layers(request):
         {'error': 'Method not allowed.'},
         status=status.HTTP_405_METHOD_NOT_ALLOWED
     )
+
+
+
+@api_view(['POST'])
+def geoserver_delete_layer_rule(request):
+    """
+    POST /api/geoserver/acl/layers/delete/
+       Body (either):
+         { "resource": "<ws>.<layer>.<access>" }
+       or flat‐map style:
+         { "<ws>.<layer>.<access>": "" }
+       → proxies into GeoServer DELETE /rest/security/acl/layers/{resource}.json
+    """
+    # 1) pull out the resource string
+    data = request.data
+    if 'resource' in data:
+        resource = data['resource']
+    elif len(data) == 1:
+        # flat‐map style: use the single key
+        resource = next(iter(data.keys()))
+    else:
+        return Response(
+            {'error': "Please send { \"resource\": \"ws.layer.access\" } or a single key."},
+            status=400
+        )
+
+    # 2) call GeoServer
+    gs_url = f"{GEOSERVER_URL}/rest/security/acl/layers/{resource}"
+    resp = requests.delete(
+        gs_url,
+        auth=(GEOSERVER_USER, GEOSERVER_PASS),
+        headers={'Accept': 'application/json'}
+    )
+
+    # 3) forward result
+    if resp.status_code in (200, 204):
+        return Response(
+            {'message': f"Successfully deleted rule '{resource}'."},
+            status=resp.status_code
+        )
+    return Response({'error': resp.text}, status=resp.status_code)
