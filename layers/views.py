@@ -137,11 +137,11 @@ def layer_list(request, workspace, datastore):
                     "nativeBoundingBox": {
                         "minx": -180,
                         "maxx": 180,
-                        "miny": -90,
-                        "maxy": 90,
-                        "crs": "EPSG:32634"
+                        "miny": -85.06,
+                        "maxy": 85.06,
+                        "crs": "EPSG:3857"
                     },
-                    "srs": "EPSG:32634",
+                    "srs": "EPSG:3857",
                     "attributes": {
                         "attribute": [
                             {"name": "id", "binding": "java.lang.Integer"},

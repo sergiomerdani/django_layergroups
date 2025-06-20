@@ -14,5 +14,7 @@ urlpatterns = [
     path("api/", include("users_app.urls")),
     path("api/", include("groups_app.urls")),
     path("api/", include("roles_app.urls")),
-    path("api/", include("security_app.urls"))
+    path("api/", include("security_app.urls")),
+    path('api/bbox/', include('bbox_updater.urls')),
+
 ]
