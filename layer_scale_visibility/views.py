@@ -1,4 +1,5 @@
 import requests
+import xml.etree.ElementTree as ET
 from django.http import HttpResponse
 from rest_framework.decorators import api_view
 from rest_framework.response import Response
@@ -13,26 +14,66 @@ workspace = "roles_test"
 
 @api_view(['GET'])
 def layer_list_api(request):
-    base    = GEOSERVER_URL
-    auth    = (GEOSERVER_USER, GEOSERVER_PASS)
-    headers = {"Accept": "application/json"}
+    base        = GEOSERVER_URL
+    auth        = (GEOSERVER_USER, GEOSERVER_PASS)
+    headers_json = {"Accept": "application/json"}
+    headers_sld  = {"Accept": "application/vnd.ogc.sld+xml"}
 
     try:
-        # 1) list all layers
-        resp = requests.get(f"{base}/layers", auth=auth, headers=headers)
+        # 1) List all layers
+        resp = requests.get(f"{base}/layers", auth=auth, headers=headers_json)
         resp.raise_for_status()
         data = resp.json()["layers"]["layer"]
         entries = data if isinstance(data, list) else [data]
 
         result = []
+        # XML namespace for SLD
+        ns = {'sld': 'http://www.opengis.net/sld'}
+
         for entry in entries:
             name = entry["name"]
-            # 2) fetch style info
-            resp2 = requests.get(f"{base}/layers/{name}.json", auth=auth, headers=headers)
+
+            # 2) Get defaultStyle name
+            resp2 = requests.get(f"{base}/layers/{name}.json", auth=auth, headers=headers_json)
             resp2.raise_for_status()
             layer_detail = resp2.json()["layer"]
-            style = layer_detail.get("defaultStyle", {}).get("name")
-            result.append({"name": name, "style": style})
+            style_full = layer_detail.get("defaultStyle", {}).get("name")
+
+            # Prepare defaults
+            min_scale = None
+            max_scale = None
+
+            if style_full:
+                # Extract local style name (after workspace:)
+                style_local = style_full.split(":", 1)[-1]
+
+                # 3) Fetch the SLD XML for that style
+                sld_url = f"{base}/workspaces/{workspace}/styles/{style_local}.sld"
+                try:
+                    resp3 = requests.get(sld_url, auth=auth, headers=headers_sld)
+                    resp3.raise_for_status()
+
+                    # 4) Parse out the Min/MaxScaleDenominator
+                    root = ET.fromstring(resp3.content)
+                    rule = root.find('.//sld:Rule', ns)
+                    if rule is not None:
+                        min_el = rule.find('sld:MinScaleDenominator', ns)
+                        max_el = rule.find('sld:MaxScaleDenominator', ns)
+                        if min_el is not None:
+                            min_scale = float(min_el.text)
+                        if max_el is not None:
+                            max_scale = float(max_el.text)
+
+                except requests.RequestException:
+                    # if the SLD fetch fails, we'll just leave min/max as None
+                    pass
+
+            result.append({
+                "name": name,
+                "style": style_full,
+                "MinScaleDenominator": min_scale,
+                "MaxScaleDenominator": max_scale
+            })
 
         return Response(result)
 
