@@ -5,6 +5,7 @@ import requests
 
 GEOSERVER_URL = "http://localhost:8080/geoserver"
 AUTH = ("admin", "geoserver")  # Replace with actual credentials
+workspace = "roles_test"  # Replace with your actual workspace
 
 @api_view(["GET"])
 def get_layer_details(request, layer_name):
@@ -13,7 +14,7 @@ def get_layer_details(request, layer_name):
     """
     try:
         # GeoServer WFS GetFeature URL (fetch JSON data)
-        wfs_url = f"{GEOSERVER_URL}/finiq_ws/ows?service=WFS&version=1.0.0&request=GetFeature&typeName={layer_name}&maxFeatures=1000&outputFormat=application/json"
+        wfs_url = f"{GEOSERVER_URL}/{workspace}/ows?service=WFS&version=1.0.0&request=GetFeature&typeName={layer_name}&maxFeatures=1000&outputFormat=application/json"
 
         # Fetch JSON layer data from GeoServer
         response = requests.get(wfs_url, auth=AUTH)

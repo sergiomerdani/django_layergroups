@@ -1,7 +1,7 @@
 # utils.py
 import requests
 
-GEOSERVER_BASE_URL = "http://localhost:8080/geoserver/rest/workspaces/finiq_ws"
+GEOSERVER_BASE_URL = "http://localhost:8080/geoserver/rest/workspaces/roles_test"
 AUTH = ("admin", "geoserver")  # Replace with your GeoServer credentials
 
 def list_styles():

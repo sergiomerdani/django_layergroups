@@ -16,5 +16,6 @@ urlpatterns = [
     path("api/", include("roles_app.urls")),
     path("api/", include("security_app.urls")),
     path('api/bbox/', include('bbox_updater.urls')),
+    path('api/', include('layer_scale_visibility.urls'))
 
 ]
