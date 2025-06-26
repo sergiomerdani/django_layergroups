@@ -12,10 +12,11 @@ GEOSERVER_PASS = "geoserver"
 workspace = "roles_test" 
 # ──────────────────────────────────────────────────────────────────
 
+
 @api_view(['GET'])
 def layer_list_api(request):
-    base        = GEOSERVER_URL
-    auth        = (GEOSERVER_USER, GEOSERVER_PASS)
+    base         = GEOSERVER_URL
+    auth         = (GEOSERVER_USER, GEOSERVER_PASS)
     headers_json = {"Accept": "application/json"}
     headers_sld  = {"Accept": "application/vnd.ogc.sld+xml"}
 
@@ -27,45 +28,55 @@ def layer_list_api(request):
         entries = data if isinstance(data, list) else [data]
 
         result = []
-        # XML namespace for SLD
         ns = {'sld': 'http://www.opengis.net/sld'}
 
         for entry in entries:
-            name = entry["name"]
+            name        = entry["name"]
+            min_scale   = None
+            max_scale   = None
 
             # 2) Get defaultStyle name
             resp2 = requests.get(f"{base}/layers/{name}.json", auth=auth, headers=headers_json)
             resp2.raise_for_status()
             layer_detail = resp2.json()["layer"]
-            style_full = layer_detail.get("defaultStyle", {}).get("name")
-
-            # Prepare defaults
-            min_scale = None
-            max_scale = None
+            style_full   = layer_detail.get("defaultStyle", {}).get("name")
 
             if style_full:
                 # Extract local style name (after workspace:)
                 style_local = style_full.split(":", 1)[-1]
+                sld_url     = f"{base}/workspaces/{workspace}/styles/{style_local}.sld"
 
-                # 3) Fetch the SLD XML for that style
-                sld_url = f"{base}/workspaces/{workspace}/styles/{style_local}.sld"
                 try:
+                    # 3) Fetch the full SLD and parse all Rule elements
                     resp3 = requests.get(sld_url, auth=auth, headers=headers_sld)
                     resp3.raise_for_status()
+                    root  = ET.fromstring(resp3.content)
 
-                    # 4) Parse out the Min/MaxScaleDenominator
-                    root = ET.fromstring(resp3.content)
-                    rule = root.find('.//sld:Rule', ns)
-                    if rule is not None:
+                    # 4) Collect every Min/MaxScaleDenominator
+                    min_values = []
+                    max_values = []
+                    for rule in root.findall('.//sld:Rule', ns):
                         min_el = rule.find('sld:MinScaleDenominator', ns)
                         max_el = rule.find('sld:MaxScaleDenominator', ns)
                         if min_el is not None:
-                            min_scale = float(min_el.text)
+                            try:
+                                min_values.append(float(min_el.text))
+                            except ValueError:
+                                pass
                         if max_el is not None:
-                            max_scale = float(max_el.text)
+                            try:
+                                max_values.append(float(max_el.text))
+                            except ValueError:
+                                pass
+
+                    # 5) Compute global min and max if any were found
+                    if min_values:
+                        min_scale = min(min_values)
+                    if max_values:
+                        max_scale = max(max_values)
 
                 except requests.RequestException:
-                    # if the SLD fetch fails, we'll just leave min/max as None
+                    # on fetch error, leave min_scale/max_scale as None
                     pass
 
             result.append({
@@ -82,7 +93,6 @@ def layer_list_api(request):
             {"detail": str(e)},
             status=status.HTTP_502_BAD_GATEWAY
         )
-
 
 @api_view(['GET'])
 def style_detail_api(request, style_name):
