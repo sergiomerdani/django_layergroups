@@ -109,24 +109,23 @@ def generate_sld(style_data):
       <sld:FeatureTypeStyle>
 """
 
-    # ── Rule-based styling ─────────────────────────────────────────────
+    # Rule-based styling
     if style_type == "rule":
         if not field_name:
             raise ValueError("Field name is required for rule-based symbology.")
 
         for rule in rules:
-            rule_name    = rule.get("name", "Unnamed Rule")
-            rule_value   = rule.get("value")
-            geom         = rule.get("geometry_type", style_data.get("geometry_type"))
-            # per-rule scale toggle & values (fallback to global)
+            rule_name     = rule.get("name", "Unnamed Rule")
+            rule_value    = rule.get("value")
+            geom          = rule.get("geometry_type", style_data.get("geometry_type"))
             rule_scale_on = rule.get("scale_enabled", scale_enabled)
             rule_min      = rule.get("min_scale_denominator", min_scale)
             rule_max      = rule.get("max_scale_denominator", max_scale)
 
-            # open Rule with optional scales
+            # 1) open Rule with optional scales
             sld += open_rule(rule_name, rule_scale_on, rule_min, rule_max)
 
-            # Filter clause
+            # 2) Filter clause
             sld += f"""\
     <sld:Filter>
       <ogc:PropertyIsEqualTo>
@@ -136,7 +135,7 @@ def generate_sld(style_data):
     </sld:Filter>
 """
 
-            # Symbolizer by geometry type
+            # 3) Symbolizer
             if geom == "polygon":
                 fc = rule.get("fill_color", fill_color)
                 fo = rule.get("fill_opacity", fill_opacity)
@@ -168,11 +167,11 @@ def generate_sld(style_data):
     </sld:LineSymbolizer>
 """
             elif geom == "point":
-                fc = rule.get("fill_color", fill_color)
-                fo = rule.get("fill_opacity", fill_opacity)
-                sc = rule.get("stroke_color", stroke_color)
-                sw = rule.get("stroke_width", stroke_width)
-                ps = rule.get("point_size", point_size)
+                fc    = rule.get("fill_color", fill_color)
+                fo    = rule.get("fill_opacity", fill_opacity)
+                sc    = rule.get("stroke_color", stroke_color)
+                sw    = rule.get("stroke_width", stroke_width)
+                ps    = rule.get("point_size", point_size)
                 shape = rule.get("point_shape", point_shape)
                 sld += f"""\
     <sld:PointSymbolizer>
@@ -192,12 +191,42 @@ def generate_sld(style_data):
       </sld:Graphic>
     </sld:PointSymbolizer>
 """
+
+            # 4) Label inside the same rule
+            if label_enabled and label_field:
+                sld += f"""\
+    <sld:TextSymbolizer>
+      <sld:Label>
+        <ogc:PropertyName>{label_field}</ogc:PropertyName>
+      </sld:Label>
+      <sld:Font>
+        <sld:CssParameter name="font-family">{font_family}</sld:CssParameter>
+        <sld:CssParameter name="font-size">{font_size}</sld:CssParameter>
+        <sld:CssParameter name="font-style">{font_style}</sld:CssParameter>
+        <sld:CssParameter name="font-weight">{font_weight}</sld:CssParameter>
+      </sld:Font>
+      <sld:LabelPlacement>
+        <sld:PointPlacement>
+          <sld:AnchorPoint>
+            <sld:AnchorPointX>0.5</sld:AnchorPointX>
+            <sld:AnchorPointY>0.5</sld:AnchorPointY>
+          </sld:AnchorPoint>
+        </sld:PointPlacement>
+      </sld:LabelPlacement>
+      <sld:Fill>
+        <sld:CssParameter name="fill">{font_color}</sld:CssParameter>
+      </sld:Fill>
+    </sld:TextSymbolizer>
+"""
+
+            # 5) Close this rule
             sld += "  </sld:Rule>\n"
 
-    # ── Single-symbol styling ───────────────────────────────────────────
+    # Single-symbol styling
     else:
         sld += open_rule("Single symbol", scale_enabled, min_scale, max_scale)
         geom = style_data.get("geometry_type", "polygon")
+
         if geom == "point":
             sld += f"""\
     <sld:PointSymbolizer>
@@ -240,12 +269,10 @@ def generate_sld(style_data):
       </sld:Stroke>
     </sld:PolygonSymbolizer>
 """
-        sld += "  </sld:Rule>\n"
 
-    # ── Optional labeling rule ─────────────────────────────────────────
-    if label_enabled and label_field:
-        sld += open_rule(f"Label: {label_field}", scale_enabled, min_scale, max_scale)
-        sld += f"""\
+        # Label inside the single-symbol rule
+        if label_enabled and label_field:
+            sld += f"""\
     <sld:TextSymbolizer>
       <sld:Label>
         <ogc:PropertyName>{label_field}</ogc:PropertyName>
@@ -258,17 +285,18 @@ def generate_sld(style_data):
       </sld:Font>
       <sld:LabelPlacement>
         <sld:PointPlacement>
-          <sld:AnchorPoint>
-            <sld:AnchorPointX>0.5</sld:AnchorPointX>
-            <sld:AnchorPointY>0.5</sld:AnchorPointY>
-          </sld:AnchorPoint>
+          <sld:AnchorPointX>0.5</sld:AnchorPointX>
+          <sld:AnchorPointY>0.5</sld:AnchorPointY>
         </sld:PointPlacement>
       </sld:LabelPlacement>
       <sld:Fill>
         <sld:CssParameter name="fill">{font_color}</sld:CssParameter>
       </sld:Fill>
     </sld:TextSymbolizer>
-  </sld:Rule>\n"""
+"""
+
+        # Close single-symbol rule
+        sld += "  </sld:Rule>\n"
 
     # SLD footer
     sld += """\
@@ -279,6 +307,7 @@ def generate_sld(style_data):
 """
 
     return sld
+
 
 
 def get_geoserver_style(style_name):
