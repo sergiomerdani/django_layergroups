@@ -121,7 +121,7 @@ def generate_sld(style_data):
             rule_scale_on = rule.get("scale_enabled", scale_enabled)
             rule_min      = rule.get("min_scale_denominator", min_scale)
             rule_max      = rule.get("max_scale_denominator", max_scale)
-
+            so            = rule.get("stroke_opacity", stroke_opacity)
             # 1) open Rule with optional scales
             sld += open_rule(rule_name, rule_scale_on, rule_min, rule_max)
 
@@ -150,13 +150,13 @@ def generate_sld(style_data):
       <sld:Stroke>
         <sld:CssParameter name="stroke">{sc}</sld:CssParameter>
         <sld:CssParameter name="stroke-width">{sw}</sld:CssParameter>
+        <sld:CssParameter name="stroke-opacity">{so}</sld:CssParameter>
       </sld:Stroke>
     </sld:PolygonSymbolizer>
 """
             elif geom == "line":
                 sc = rule.get("stroke_color", stroke_color)
                 sw = rule.get("stroke_width", stroke_width)
-                so = rule.get("stroke_opacity", stroke_opacity)
                 sld += f"""\
     <sld:LineSymbolizer>
       <sld:Stroke>
@@ -185,6 +185,7 @@ def generate_sld(style_data):
           <sld:Stroke>
             <sld:CssParameter name="stroke">{sc}</sld:CssParameter>
             <sld:CssParameter name="stroke-width">{sw}</sld:CssParameter>
+            <sld:CssParameter name="stroke-opacity">{so}</sld:CssParameter>
           </sld:Stroke>
         </sld:Mark>
         <sld:Size>{ps}</sld:Size>
@@ -240,6 +241,7 @@ def generate_sld(style_data):
           <sld:Stroke>
             <sld:CssParameter name="stroke">{stroke_color}</sld:CssParameter>
             <sld:CssParameter name="stroke-width">{stroke_width}</sld:CssParameter>
+            <sld:CssParameter name="stroke-opacity">{stroke_opacity}</sld:CssParameter>
           </sld:Stroke>
         </sld:Mark>
         <sld:Size>{point_size}</sld:Size>
