@@ -28,7 +28,7 @@ def create_geoserver_style(style_data):
     if "style_type" not in style_data:
         raise ValueError("The 'style_type' field is required.")
 
-    sld_body = generate_sld(style_data)
+    sld_body = generate_rule_sld(style_data)
 
     headers = {'Content-Type': 'application/vnd.ogc.sld+xml'}
     response = requests.post(
@@ -44,64 +44,22 @@ def create_geoserver_style(style_data):
     else:
         return {'success': False, 'message': response.text}
 
-def generate_sld(style_data):
-    """
-    Generate SLD XML (1.0.0) for single or rule-based styling for polygon, line, and point types,
-    including optional dynamic labeling and optional scale-denominator visibility,
-    toggled the same way as labeling (on/off per layer or per rule).
-    """
-    # Basic style/layer identifiers
-    style_name     = style_data.get("name", "default_style")
-    layer_name     = style_data.get("layer_name", "default_layer")
-    style_type     = style_data.get("style_type", "single")  # "single" or "rule"
+def _open_rule(rule_name, min_scale=None, max_scale=None):
+    parts = [
+        "<sld:Rule>",
+        f"  <sld:Name>{rule_name}</sld:Name>"
+    ]
+    if min_scale is not None:
+        parts.append(f"  <sld:MinScaleDenominator>{min_scale}</sld:MinScaleDenominator>")
+    if max_scale is not None:
+        parts.append(f"  <sld:MaxScaleDenominator>{max_scale}</sld:MaxScaleDenominator>")
+    return "\n".join(parts) + "\n"
 
-    # Shared symbol parameters
-    field_name     = style_data.get("field_name")             # for rule-based
-    rules          = style_data.get("rules", [])
-    stroke_color   = style_data.get("stroke_color", "#000000")
-    stroke_width   = style_data.get("stroke_width", 1)
-    stroke_opacity = style_data.get("stroke_opacity", 1)
-
-    # Polygon fill
-    fill_color     = style_data.get("fill_color", "#FFFFFF")
-    fill_opacity   = style_data.get("fill_opacity", 1)
-
-    # Point marker
-    point_size     = style_data.get("point_size", 10)
-    point_shape    = style_data.get("point_shape", "circle")
-
-    # Labeling
-    label_enabled  = style_data.get("label_enabled", False)
-    label_field    = style_data.get("label_field")
-    font_family    = style_data.get("font_family", "Arial")
-    font_size      = style_data.get("font_size", 10)
-    font_color     = style_data.get("font_color", "#000000")
-    font_style     = style_data.get("font_style", "normal")
-    font_weight    = style_data.get("font_weight", "normal")
-
-    # Scale-visibility toggle and values
-    scale_enabled  = style_data.get("scale_enabled", False)
-    min_scale      = style_data.get("min_scale_denominator")
-    max_scale      = style_data.get("max_scale_denominator")
-
-    # Helper to open a Rule, injecting scale denominators only if enabled
-    def open_rule(rule_name, enable_scale=False, rule_min=None, rule_max=None):
-        lines = [
-            "<sld:Rule>",
-            f"    <sld:Name>{rule_name}</sld:Name>"
-        ]
-        if enable_scale:
-            if rule_min is not None:
-                lines.append(f"    <sld:MinScaleDenominator>{rule_min}</sld:MinScaleDenominator>")
-            if rule_max is not None:
-                lines.append(f"    <sld:MaxScaleDenominator>{rule_max}</sld:MaxScaleDenominator>")
-        return "\n".join(lines) + "\n"
-
-    # SLD header
-    sld = f"""<sld:StyledLayerDescriptor xmlns:sld="http://www.opengis.net/sld"
-                           xmlns:gml="http://www.opengis.net/gml"
-                           xmlns:ogc="http://www.opengis.net/ogc"
-                           version="1.0.0">
+def _sld_header(layer_name, style_name):
+    return f"""<sld:StyledLayerDescriptor xmlns:sld="http://www.opengis.net/sld"
+    xmlns:gml="http://www.opengis.net/gml"
+    xmlns:ogc="http://www.opengis.net/ogc"
+    version="1.0.0">
   <sld:NamedLayer>
     <sld:Name>{layer_name}</sld:Name>
     <sld:UserStyle>
@@ -109,209 +67,263 @@ def generate_sld(style_data):
       <sld:FeatureTypeStyle>
 """
 
-    # Rule-based styling
-    if style_type == "rule":
-        if not field_name:
-            raise ValueError("Field name is required for rule-based symbology.")
-
-        for rule in rules:
-            rule_name     = rule.get("name", "Unnamed Rule")
-            rule_value    = rule.get("value")
-            geom          = rule.get("geometry_type", style_data.get("geometry_type"))
-            rule_scale_on = rule.get("scale_enabled", scale_enabled)
-            rule_min      = rule.get("min_scale_denominator", min_scale)
-            rule_max      = rule.get("max_scale_denominator", max_scale)
-            so            = rule.get("stroke_opacity", stroke_opacity)
-            # 1) open Rule with optional scales
-            sld += open_rule(rule_name, rule_scale_on, rule_min, rule_max)
-
-            # 2) Filter clause
-            sld += f"""\
-    <sld:Filter>
-      <ogc:PropertyIsEqualTo>
-        <ogc:PropertyName>{field_name}</ogc:PropertyName>
-        <ogc:Literal>{rule_value}</ogc:Literal>
-      </ogc:PropertyIsEqualTo>
-    </sld:Filter>
-"""
-
-            # 3) Symbolizer
-            if geom == "polygon":
-                fc = rule.get("fill_color", fill_color)
-                fo = rule.get("fill_opacity", fill_opacity)
-                sc = rule.get("stroke_color", stroke_color)
-                sw = rule.get("stroke_width", stroke_width)
-                sld += f"""\
-    <sld:PolygonSymbolizer>
-      <sld:Fill>
-        <sld:CssParameter name="fill">{fc}</sld:CssParameter>
-        <sld:CssParameter name="fill-opacity">{fo}</sld:CssParameter>
-      </sld:Fill>
-      <sld:Stroke>
-        <sld:CssParameter name="stroke">{sc}</sld:CssParameter>
-        <sld:CssParameter name="stroke-width">{sw}</sld:CssParameter>
-        <sld:CssParameter name="stroke-opacity">{so}</sld:CssParameter>
-      </sld:Stroke>
-    </sld:PolygonSymbolizer>
-"""
-            elif geom == "line":
-                sc = rule.get("stroke_color", stroke_color)
-                sw = rule.get("stroke_width", stroke_width)
-                sld += f"""\
-    <sld:LineSymbolizer>
-      <sld:Stroke>
-        <sld:CssParameter name="stroke">{sc}</sld:CssParameter>
-        <sld:CssParameter name="stroke-width">{sw}</sld:CssParameter>
-        <sld:CssParameter name="stroke-opacity">{so}</sld:CssParameter>
-      </sld:Stroke>
-    </sld:LineSymbolizer>
-"""
-            elif geom == "point":
-                fc    = rule.get("fill_color", fill_color)
-                fo    = rule.get("fill_opacity", fill_opacity)
-                sc    = rule.get("stroke_color", stroke_color)
-                sw    = rule.get("stroke_width", stroke_width)
-                ps    = rule.get("point_size", point_size)
-                shape = rule.get("point_shape", point_shape)
-                sld += f"""\
-    <sld:PointSymbolizer>
-      <sld:Graphic>
-        <sld:Mark>
-          <sld:WellKnownName>{shape}</sld:WellKnownName>
-          <sld:Fill>
-            <sld:CssParameter name="fill">{fc}</sld:CssParameter>
-            <sld:CssParameter name="fill-opacity">{fo}</sld:CssParameter>
-          </sld:Fill>
-          <sld:Stroke>
-            <sld:CssParameter name="stroke">{sc}</sld:CssParameter>
-            <sld:CssParameter name="stroke-width">{sw}</sld:CssParameter>
-            <sld:CssParameter name="stroke-opacity">{so}</sld:CssParameter>
-          </sld:Stroke>
-        </sld:Mark>
-        <sld:Size>{ps}</sld:Size>
-      </sld:Graphic>
-    </sld:PointSymbolizer>
-"""
-
-            # 4) Label inside the same rule
-            if label_enabled and label_field:
-                sld += f"""\
-    <sld:TextSymbolizer>
-      <sld:Label>
-        <ogc:PropertyName>{label_field}</ogc:PropertyName>
-      </sld:Label>
-      <sld:Font>
-        <sld:CssParameter name="font-family">{font_family}</sld:CssParameter>
-        <sld:CssParameter name="font-size">{font_size}</sld:CssParameter>
-        <sld:CssParameter name="font-style">{font_style}</sld:CssParameter>
-        <sld:CssParameter name="font-weight">{font_weight}</sld:CssParameter>
-      </sld:Font>
-      <sld:LabelPlacement>
-        <sld:PointPlacement>
-          <sld:AnchorPoint>
-            <sld:AnchorPointX>0.5</sld:AnchorPointX>
-            <sld:AnchorPointY>0.5</sld:AnchorPointY>
-          </sld:AnchorPoint>
-        </sld:PointPlacement>
-      </sld:LabelPlacement>
-      <sld:Fill>
-        <sld:CssParameter name="fill">{font_color}</sld:CssParameter>
-      </sld:Fill>
-    </sld:TextSymbolizer>
-"""
-
-            # 5) Close this rule
-            sld += "  </sld:Rule>\n"
-
-    # Single-symbol styling
-    else:
-        sld += open_rule("Single symbol", scale_enabled, min_scale, max_scale)
-        geom = style_data.get("geometry_type", "polygon")
-
-        if geom == "point":
-            sld += f"""\
-    <sld:PointSymbolizer>
-      <sld:Graphic>
-        <sld:Mark>
-          <sld:WellKnownName>{point_shape}</sld:WellKnownName>
-          <sld:Fill>
-            <sld:CssParameter name="fill">{fill_color}</sld:CssParameter>
-            <sld:CssParameter name="fill-opacity">{fill_opacity}</sld:CssParameter>
-          </sld:Fill>
-          <sld:Stroke>
-            <sld:CssParameter name="stroke">{stroke_color}</sld:CssParameter>
-            <sld:CssParameter name="stroke-width">{stroke_width}</sld:CssParameter>
-            <sld:CssParameter name="stroke-opacity">{stroke_opacity}</sld:CssParameter>
-          </sld:Stroke>
-        </sld:Mark>
-        <sld:Size>{point_size}</sld:Size>
-      </sld:Graphic>
-    </sld:PointSymbolizer>
-"""
-        elif geom == "line":
-            sld += f"""\
-    <sld:LineSymbolizer>
-      <sld:Stroke>
-        <sld:CssParameter name="stroke">{stroke_color}</sld:CssParameter>
-        <sld:CssParameter name="stroke-width">{stroke_width}</sld:CssParameter>
-        <sld:CssParameter name="stroke-opacity">{stroke_opacity}</sld:CssParameter>
-      </sld:Stroke>
-    </sld:LineSymbolizer>
-"""
-        else:  # polygon
-            sld += f"""\
-    <sld:PolygonSymbolizer>
-      <sld:Fill>
-        <sld:CssParameter name="fill">{fill_color}</sld:CssParameter>
-        <sld:CssParameter name="fill-opacity">{fill_opacity}</sld:CssParameter>
-      </sld:Fill>
-      <sld:Stroke>
-        <sld:CssParameter name="stroke">{stroke_color}</sld:CssParameter>
-        <sld:CssParameter name="stroke-width">{stroke_width}</sld:CssParameter>
-      </sld:Stroke>
-    </sld:PolygonSymbolizer>
-"""
-
-        # Label inside the single-symbol rule
-        if label_enabled and label_field:
-            sld += f"""\
-    <sld:TextSymbolizer>
-      <sld:Label>
-        <ogc:PropertyName>{label_field}</ogc:PropertyName>
-      </sld:Label>
-      <sld:Font>
-        <sld:CssParameter name="font-family">{font_family}</sld:CssParameter>
-        <sld:CssParameter name="font-size">{font_size}</sld:CssParameter>
-        <sld:CssParameter name="font-style">{font_style}</sld:CssParameter>
-        <sld:CssParameter name="font-weight">{font_weight}</sld:CssParameter>
-      </sld:Font>
-      <sld:LabelPlacement>
-        <sld:PointPlacement>
-          <sld:AnchorPointX>0.5</sld:AnchorPointX>
-          <sld:AnchorPointY>0.5</sld:AnchorPointY>
-        </sld:PointPlacement>
-      </sld:LabelPlacement>
-      <sld:Fill>
-        <sld:CssParameter name="fill">{font_color}</sld:CssParameter>
-      </sld:Fill>
-    </sld:TextSymbolizer>
-"""
-
-        # Close single-symbol rule
-        sld += "  </sld:Rule>\n"
-
-    # SLD footer
-    sld += """\
-      </sld:FeatureTypeStyle>
+def _sld_footer():
+    return """      </sld:FeatureTypeStyle>
     </sld:UserStyle>
   </sld:NamedLayer>
 </sld:StyledLayerDescriptor>
 """
 
+def generate_single_sld(style_data):
+    """
+    Generate an SLD with exactly one Rule, one symbolizer, and optional labeling.
+    """
+    layer = style_data.get("layer_name", "layer")
+    style = style_data.get("name", "single_style")
+    geom  = style_data.get("geometry_type", "polygon")
+
+    # Symbol parameters
+    stroke_color   = style_data.get("stroke_color", "#000000")
+    stroke_width   = style_data.get("stroke_width", 1)
+    stroke_opacity = style_data.get("stroke_opacity", 1)
+    fill_color     = style_data.get("fill_color", "#FFFFFF")
+    fill_opacity   = style_data.get("fill_opacity", 1)
+    point_size     = style_data.get("point_size", 10)
+    point_shape    = style_data.get("point_shape", "circle")
+
+    # Label parameters
+    label_enabled = style_data.get("label_enabled", False)
+    label_field   = style_data.get("label_field")
+    font_family   = style_data.get("font_family", "Arial")
+    font_size     = style_data.get("font_size", 10)
+    font_style    = style_data.get("font_style", "normal")
+    font_weight   = style_data.get("font_weight", "normal")
+    font_color    = style_data.get("font_color", "#000000")
+
+    # Scale
+    min_scale = style_data.get("min_scale_denominator")
+    max_scale = style_data.get("max_scale_denominator")
+
+    sld = _sld_header(layer, style)
+    sld += _open_rule("Single symbol", min_scale, max_scale)
+
+    # Symbolizer
+    if geom == "point":
+        sld += f"""
+  <sld:PointSymbolizer>
+    <sld:Graphic>
+      <sld:Mark>
+        <sld:WellKnownName>{point_shape}</sld:WellKnownName>
+        <sld:Fill>
+          <sld:CssParameter name="fill">{fill_color}</sld:CssParameter>
+          <sld:CssParameter name="fill-opacity">{fill_opacity}</sld:CssParameter>
+        </sld:Fill>
+        <sld:Stroke>
+          <sld:CssParameter name="stroke">{stroke_color}</sld:CssParameter>
+          <sld:CssParameter name="stroke-width">{stroke_width}</sld:CssParameter>
+          <sld:CssParameter name="stroke-opacity">{stroke_opacity}</sld:CssParameter>
+        </sld:Stroke>
+      </sld:Mark>
+      <sld:Size>{point_size}</sld:Size>
+    </sld:Graphic>
+  </sld:PointSymbolizer>
+"""
+    elif geom == "line":
+        sld += f"""
+  <sld:LineSymbolizer>
+    <sld:Stroke>
+      <sld:CssParameter name="stroke">{stroke_color}</sld:CssParameter>
+      <sld:CssParameter name="stroke-width">{stroke_width}</sld:CssParameter>
+      <sld:CssParameter name="stroke-opacity">{stroke_opacity}</sld:CssParameter>
+    </sld:Stroke>
+  </sld:LineSymbolizer>
+"""
+    else:  # polygon
+        sld += f"""
+  <sld:PolygonSymbolizer>
+    <sld:Fill>
+      <sld:CssParameter name="fill">{fill_color}</sld:CssParameter>
+      <sld:CssParameter name="fill-opacity">{fill_opacity}</sld:CssParameter>
+    </sld:Fill>
+    <sld:Stroke>
+      <sld:CssParameter name="stroke">{stroke_color}</sld:CssParameter>
+      <sld:CssParameter name="stroke-width">{stroke_width}</sld:CssParameter>
+      <sld:CssParameter name="stroke-opacity">{stroke_opacity}</sld:CssParameter>
+    </sld:Stroke>
+  </sld:PolygonSymbolizer>
+"""
+
+    # <-- Insert optional label here -->
+    if label_enabled and label_field:
+        sld += f"""
+  <sld:TextSymbolizer>
+    <sld:Label>
+      <ogc:PropertyName>{label_field}</ogc:PropertyName>
+    </sld:Label>
+    <sld:Font>
+      <sld:CssParameter name="font-family">{font_family}</sld:CssParameter>
+      <sld:CssParameter name="font-size">{font_size}</sld:CssParameter>
+      <sld:CssParameter name="font-style">{font_style}</sld:CssParameter>
+      <sld:CssParameter name="font-weight">{font_weight}</sld:CssParameter>
+    </sld:Font>
+    <sld:LabelPlacement>
+      <sld:PointPlacement>
+        <sld:AnchorPoint>
+          <sld:AnchorPointX>0.5</sld:AnchorPointX>
+          <sld:AnchorPointY>0.5</sld:AnchorPointY>
+        </sld:AnchorPoint>
+      </sld:PointPlacement>
+    </sld:LabelPlacement>
+    <sld:Fill>
+      <sld:CssParameter name="fill">{font_color}</sld:CssParameter>
+    </sld:Fill>
+  </sld:TextSymbolizer>
+"""
+
+    # Close rule and SLD
+    sld += "  </sld:Rule>\n"
+    sld += _sld_footer()
+
     return sld
 
+def generate_rule_sld(style_data):
+    """
+    Generate an SLD with multiple Rules driven by a field,
+    plus a fallback Rule for everything else.
+    """
+    if "field_name" not in style_data:
+        raise ValueError("field_name is required for rule-based SLD")
 
+    # Core identifiers
+    layer         = style_data.get("layer_name", "layer")
+    style         = style_data.get("name", "rule_style")
+    field         = style_data["field_name"]
+    base_geom     = style_data.get("geometry_type", "polygon")
 
+    # Default symbol params
+    stroke_op     = style_data.get("stroke_opacity", 1)
+    fill_color    = style_data.get("fill_color", "#FFFFFF")
+    fill_opacity  = style_data.get("fill_opacity", 1)
+    stroke_color  = style_data.get("stroke_color", "#000000")
+    stroke_width  = style_data.get("stroke_width", 1)
+    point_size    = style_data.get("point_size", 10)
+    point_shape   = style_data.get("point_shape", "circle")
+
+    # Label params
+    label_enabled = style_data.get("label_enabled", False)
+    label_field   = style_data.get("label_field")
+    font_family   = style_data.get("font_family", "Arial")
+    font_size     = style_data.get("font_size", 10)
+    font_style    = style_data.get("font_style", "normal")
+    font_weight   = style_data.get("font_weight", "normal")
+    font_color    = style_data.get("font_color", "#000000")
+
+    sld = _sld_header(layer, style)
+
+    # 1) explicit rules
+    for rule in style_data.get("rules", []):
+        name   = rule.get("name", "rule")
+        val    = rule["value"]
+        geom   = rule.get("geometry_type", base_geom)
+        min_s  = rule.get("min_scale_denominator")
+        max_s  = rule.get("max_scale_denominator")
+        so     = rule.get("stroke_opacity", stroke_op)
+        fc     = rule.get("fill_color", fill_color)
+        fo     = rule.get("fill_opacity", fill_opacity)
+        sc     = rule.get("stroke_color", stroke_color)
+        sw     = rule.get("stroke_width", stroke_width)
+        ps     = rule.get("point_size", point_size)
+        shape  = rule.get("point_shape", point_shape)
+
+        sld += _open_rule(name, min_s, max_s)
+
+        sld += f"""
+  <sld:Filter>
+    <ogc:PropertyIsEqualTo>
+      <ogc:PropertyName>{field}</ogc:PropertyName>
+      <ogc:Literal>{val}</ogc:Literal>
+    </ogc:PropertyIsEqualTo>
+  </sld:Filter>
+"""
+        # symbolizer (same as before)…
+        if geom == "polygon":
+            sld += f"""
+  <sld:PolygonSymbolizer>
+    <sld:Fill>
+      <sld:CssParameter name="fill">{fc}</sld:CssParameter>
+      <sld:CssParameter name="fill-opacity">{fo}</sld:CssParameter>
+    </sld:Fill>
+    <sld:Stroke>
+      <sld:CssParameter name="stroke">{sc}</sld:CssParameter>
+      <sld:CssParameter name="stroke-width">{sw}</sld:CssParameter>
+      <sld:CssParameter name="stroke-opacity">{so}</sld:CssParameter>
+    </sld:Stroke>
+  </sld:PolygonSymbolizer>
+"""
+        elif geom == "line":
+            sld += f"""
+  <sld:LineSymbolizer>
+    <sld:Stroke>
+      <sld:CssParameter name="stroke">{sc}</sld:CssParameter>
+      <sld:CssParameter name="stroke-width">{sw}</sld:CssParameter>
+      <sld:CssParameter name="stroke-opacity">{so}</sld:CssParameter>
+    </sld:Stroke>
+  </sld:LineSymbolizer>
+"""
+        else:  # point
+            sld += f"""
+  <sld:PointSymbolizer>
+    <sld:Graphic>
+      <sld:Mark>
+        <sld:WellKnownName>{shape}</sld:WellKnownName>
+        <sld:Fill>
+          <sld:CssParameter name="fill">{fc}</sld:CssParameter>
+          <sld:CssParameter name="fill-opacity">{fo}</sld:CssParameter>
+        </sld:Fill>
+        <sld:Stroke>
+          <sld:CssParameter name="stroke">{sc}</sld:CssParameter>
+          <sld:CssParameter name="stroke-width">{sw}</sld:CssParameter>
+          <sld:CssParameter name="stroke-opacity">{so}</sld:CssParameter>
+        </sld:Stroke>
+      </sld:Mark>
+      <sld:Size>{ps}</sld:Size>
+    </sld:Graphic>
+  </sld:PointSymbolizer>
+"""
+
+        # label inside explicit rule
+        if label_enabled and label_field:
+            sld += f"""
+  <sld:TextSymbolizer>
+    <sld:Label>
+      <ogc:PropertyName>{label_field}</ogc:PropertyName>
+    </sld:Label>
+    <sld:Font>
+      <sld:CssParameter name="font-family">{font_family}</sld:CssParameter>
+      <sld:CssParameter name="font-size">{font_size}</sld:CssParameter>
+      <sld:CssParameter name="font-style">{font_style}</sld:CssParameter>
+      <sld:CssParameter name="font-weight">{font_weight}</sld:CssParameter>
+    </sld:Font>
+    <sld:LabelPlacement>
+      <sld:PointPlacement>
+        <sld:AnchorPoint>
+          <sld:AnchorPointX>0.5</sld:AnchorPointX>
+          <sld:AnchorPointY>0.5</sld:AnchorPointY>
+        </sld:AnchorPoint>
+      </sld:PointPlacement>
+    </sld:LabelPlacement>
+    <sld:Fill>
+      <sld:CssParameter name="fill">{font_color}</sld:CssParameter>
+    </sld:Fill>
+  </sld:TextSymbolizer>
+"""
+   
+        sld += "  </sld:Rule>\n"
+
+    sld += _sld_footer()
+    return sld
+
+  
 def get_geoserver_style(style_name):
     """
     Fetch details of a specific style in the GeoServer workspace.
