@@ -74,6 +74,35 @@ def _sld_footer():
 </sld:StyledLayerDescriptor>
 """
 
+def _make_text_symbolizer(label_field, font_family, font_size, font_style, font_weight, font_color):
+    """
+    Returns a TextSymbolizer block given label parameters.
+    """
+    return f"""
+  <sld:TextSymbolizer>
+    <sld:Label>
+      <ogc:PropertyName>{label_field}</ogc:PropertyName>
+    </sld:Label>
+    <sld:Font>
+      <sld:CssParameter name=\"font-family\">{font_family}</sld:CssParameter>
+      <sld:CssParameter name=\"font-size\">{font_size}</sld:CssParameter>
+      <sld:CssParameter name=\"font-style\">{font_style}</sld:CssParameter>
+      <sld:CssParameter name=\"font-weight\">{font_weight}</sld:CssParameter>
+    </sld:Font>
+    <sld:LabelPlacement>
+      <sld:PointPlacement>
+        <sld:AnchorPoint>
+          <sld:AnchorPointX>0.5</sld:AnchorPointX>
+          <sld:AnchorPointY>0.5</sld:AnchorPointY>
+        </sld:AnchorPoint>
+      </sld:PointPlacement>
+    </sld:LabelPlacement>
+    <sld:Fill>
+      <sld:CssParameter name=\"fill\">{font_color}</sld:CssParameter>
+    </sld:Fill>
+  </sld:TextSymbolizer>
+"""
+
 def generate_single_sld(style_data):
     """
     Generate an SLD with exactly one Rule, one symbolizer, and optional labeling.
@@ -153,32 +182,15 @@ def generate_single_sld(style_data):
   </sld:PolygonSymbolizer>
 """
 
-    # <-- Insert optional label here -->
     if label_enabled and label_field:
-        sld += f"""
-  <sld:TextSymbolizer>
-    <sld:Label>
-      <ogc:PropertyName>{label_field}</ogc:PropertyName>
-    </sld:Label>
-    <sld:Font>
-      <sld:CssParameter name="font-family">{font_family}</sld:CssParameter>
-      <sld:CssParameter name="font-size">{font_size}</sld:CssParameter>
-      <sld:CssParameter name="font-style">{font_style}</sld:CssParameter>
-      <sld:CssParameter name="font-weight">{font_weight}</sld:CssParameter>
-    </sld:Font>
-    <sld:LabelPlacement>
-      <sld:PointPlacement>
-        <sld:AnchorPoint>
-          <sld:AnchorPointX>0.5</sld:AnchorPointX>
-          <sld:AnchorPointY>0.5</sld:AnchorPointY>
-        </sld:AnchorPoint>
-      </sld:PointPlacement>
-    </sld:LabelPlacement>
-    <sld:Fill>
-      <sld:CssParameter name="fill">{font_color}</sld:CssParameter>
-    </sld:Fill>
-  </sld:TextSymbolizer>
-"""
+        sld += _make_text_symbolizer(
+            label_field,
+            font_family,
+            font_size,
+            font_style,
+            font_weight,
+            font_color
+        )
 
     # Close rule and SLD
     sld += "  </sld:Rule>\n"
@@ -292,32 +304,16 @@ def generate_rule_sld(style_data):
 """
 
         # label inside explicit rule
+        # Label block
         if label_enabled and label_field:
-            sld += f"""
-  <sld:TextSymbolizer>
-    <sld:Label>
-      <ogc:PropertyName>{label_field}</ogc:PropertyName>
-    </sld:Label>
-    <sld:Font>
-      <sld:CssParameter name="font-family">{font_family}</sld:CssParameter>
-      <sld:CssParameter name="font-size">{font_size}</sld:CssParameter>
-      <sld:CssParameter name="font-style">{font_style}</sld:CssParameter>
-      <sld:CssParameter name="font-weight">{font_weight}</sld:CssParameter>
-    </sld:Font>
-    <sld:LabelPlacement>
-      <sld:PointPlacement>
-        <sld:AnchorPoint>
-          <sld:AnchorPointX>0.5</sld:AnchorPointX>
-          <sld:AnchorPointY>0.5</sld:AnchorPointY>
-        </sld:AnchorPoint>
-      </sld:PointPlacement>
-    </sld:LabelPlacement>
-    <sld:Fill>
-      <sld:CssParameter name="fill">{font_color}</sld:CssParameter>
-    </sld:Fill>
-  </sld:TextSymbolizer>
-"""
-   
+            sld += _make_text_symbolizer(
+                label_field,
+                font_family,
+                font_size,
+                font_style,
+                font_weight,
+                font_color
+            )
         sld += "  </sld:Rule>\n"
 
     sld += _sld_footer()
