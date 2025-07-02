@@ -248,7 +248,6 @@ def generate_rule_sld(style_data):
         shape  = rule.get("point_shape", point_shape)
 
         sld += _open_rule(name, min_s, max_s)
-
         sld += f"""
   <sld:Filter>
     <ogc:PropertyIsEqualTo>
@@ -257,7 +256,7 @@ def generate_rule_sld(style_data):
     </ogc:PropertyIsEqualTo>
   </sld:Filter>
 """
-        # symbolizer (same as before)…
+        # symbolizer (same as before)…  
         if geom == "polygon":
             sld += f"""
   <sld:PolygonSymbolizer>
@@ -302,9 +301,7 @@ def generate_rule_sld(style_data):
     </sld:Graphic>
   </sld:PointSymbolizer>
 """
-
-        # label inside explicit rule
-        # Label block
+        # label inside explicit rule  
         if label_enabled and label_field:
             sld += _make_text_symbolizer(
                 label_field,
@@ -316,8 +313,83 @@ def generate_rule_sld(style_data):
             )
         sld += "  </sld:Rule>\n"
 
+    # 2) fallback rule for everything else (dedented outside the loop)
+    sld += _open_rule(rule_name="default")
+    
+    sld += f"""
+      <sld:Filter xmlns:ogc="http://www.opengis.net/ogc">
+        <ogc:Or>
+          <ogc:PropertyIsNull>
+            <ogc:PropertyName>{field}</ogc:PropertyName>
+          </ogc:PropertyIsNull>
+          <ogc:PropertyIsEqualTo>
+            <ogc:PropertyName>{field}</ogc:PropertyName>
+            <ogc:Literal></ogc:Literal>
+          </ogc:PropertyIsEqualTo>
+        </ogc:Or>
+      </sld:Filter>
+    """
+
+    # no <sld:Filter> here, so it catches all remaining features
+    if base_geom == "polygon":
+        sld += f"""
+  <sld:PolygonSymbolizer>
+    <sld:Fill>
+      <sld:CssParameter name="fill">{fill_color}</sld:CssParameter>
+      <sld:CssParameter name="fill-opacity">{fill_opacity}</sld:CssParameter>
+    </sld:Fill>
+    <sld:Stroke>
+      <sld:CssParameter name="stroke">{stroke_color}</sld:CssParameter>
+      <sld:CssParameter name="stroke-width">{stroke_width}</sld:CssParameter>
+      <sld:CssParameter name="stroke-opacity">{stroke_op}</sld:CssParameter>
+    </sld:Stroke>
+  </sld:PolygonSymbolizer>
+"""
+    elif base_geom == "line":
+        sld += f"""
+  <sld:LineSymbolizer>
+    <sld:Stroke>
+      <sld:CssParameter name="stroke">{stroke_color}</sld:CssParameter>
+      <sld:CssParameter name="stroke-width">{stroke_width}</sld:CssParameter>
+      <sld:CssParameter name="stroke-opacity">{stroke_op}</sld:CssParameter>
+    </sld:Stroke>
+  </sld:LineSymbolizer>
+"""
+    else:  # point
+        sld += f"""
+  <sld:PointSymbolizer>
+    <sld:Graphic>
+      <sld:Mark>
+        <sld:WellKnownName>{point_shape}</sld:WellKnownName>
+        <sld:Fill>
+          <sld:CssParameter name="fill">{fill_color}</sld:CssParameter>
+          <sld:CssParameter name="fill-opacity">{fill_opacity}</sld:CssParameter>
+        </sld:Fill>
+        <sld:Stroke>
+          <sld:CssParameter name="stroke">{stroke_color}</sld:CssParameter>
+          <sld:CssParameter name="stroke-width">{stroke_width}</sld:CssParameter>
+          <sld:CssParameter name="stroke-opacity">{stroke_op}</sld:CssParameter>
+        </sld:Stroke>
+      </sld:Mark>
+      <sld:Size>{point_size}</sld:Size>
+    </sld:Graphic>
+  </sld:PointSymbolizer>
+"""
+    # optional label on the fallback rule
+    if label_enabled and label_field:
+        sld += _make_text_symbolizer(
+            label_field,
+            font_family,
+            font_size,
+            font_style,
+            font_weight,
+            font_color
+        )
+
+    sld += "  </sld:Rule>\n"
     sld += _sld_footer()
     return sld
+
 
   
 def get_geoserver_style(style_name):
