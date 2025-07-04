@@ -28,7 +28,7 @@ def create_geoserver_style(style_data):
     if "style_type" not in style_data:
         raise ValueError("The 'style_type' field is required.")
 
-    sld_body = generate_rule_sld(style_data)
+    sld_body = generate_single_sld(style_data)
 
     headers = {'Content-Type': 'application/vnd.ogc.sld+xml'}
     response = requests.post(
