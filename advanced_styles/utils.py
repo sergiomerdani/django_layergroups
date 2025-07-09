@@ -442,7 +442,7 @@ def update_geoserver_style_from_json(style_name, new_style_data):
             print("Warning: Could not fetch existing metadata; proceeding with provided data.")
 
         # Generate a brand-new SLD from the update payload.
-        sld_body = generate_sld(new_style_data)
+        sld_body = generate_rule_sld(new_style_data)
         if not sld_body:
             return {"success": False, "message": "Generated SLD is empty."}
 

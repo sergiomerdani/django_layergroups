@@ -78,14 +78,17 @@ WSGI_APPLICATION = "layergroups_project.wsgi.application"
 DATABASES = {
     'default': {
         'ENGINE': 'django.db.backends.postgresql',
-        'NAME': 'layergroups',          # Database name
-        'USER': 'postgres',        # Database user
-        'PASSWORD': 'postgres',       # User's password
-        'HOST': 'localhost',            # Set to '127.0.0.1' or the server IP
-        'PORT': '5432',                 # Default PostgreSQL port
+        'NAME': 'postgis_sample',
+        'USER': 'postgres',
+        'PASSWORD': 'postgres',
+        'HOST': 'localhost',
+        'PORT': '5432',  
     }
 }
 
+GEOSERVER_URL  = "http://localhost:8080/geoserver"
+GEOSERVER_USER = "admin"
+GEOSERVER_PASS = "geoserver"
 
 
 # Password validation
@@ -123,8 +126,12 @@ USE_TZ = True
 # https://docs.djangoproject.com/en/5.1/howto/static-files/
 
 STATIC_URL = "static/"
+STATIC_DIRS = [BASE_DIR / "static/"]
 
 # Default primary key field type
 # https://docs.djangoproject.com/en/5.1/ref/settings/#default-auto-field
 
 DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
+
+MEDIA_URL = '/media/'
+MEDIA_ROOT = BASE_DIR / 'media'
