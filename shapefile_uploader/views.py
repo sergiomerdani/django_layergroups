@@ -44,6 +44,9 @@ def upload_shapefile(request):
     src_ds    = ogr.Open(shp_file)
     src_layer = src_ds.GetLayer()
     srs       = src_layer.GetSpatialRef()
+    geom_code = src_layer.GetGeomType()
+    geom_type = ogr.GeometryTypeToName(geom_code)
+    print(geom_type)
     if srs:
         auth_name = srs.GetAuthorityName(None)
         auth_code = srs.GetAuthorityCode(None)
@@ -53,6 +56,16 @@ def upload_shapefile(request):
         srs_code = "EPSG:3857"
     src_ds.Destroy()
 
+
+    # — map OGR geometry constants to the OGR “-nlt” strings
+    if geom_type == "Point":
+        nlt = "Point"
+    elif geom_type == "Line String":
+        nlt = "LineString"
+    elif geom_type == "Polygon":
+        nlt = "Geometry"
+    else:
+        nlt = "PROMOTE_TO_MULTI"
     # 4) Build PostGIS DSN
     pg = settings.DATABASES['default']
     conn_str = (
@@ -63,8 +76,12 @@ def upload_shapefile(request):
         f"password={pg['PASSWORD']}"
     )
 
+    print(nlt)
     # 5) Ingest into PostGIS (CLI w/ PROMOTE_TO_MULTI or Python API)
     ogr2ogr_exe = shutil.which("ogr2ogr")
+    extra = []
+    if geom_type in (ogr.wkbMultiLineString, ogr.wkbMultiPoint, ogr.wkbMultiPolygon):
+        extra = ["-explodecollections"]
     if ogr2ogr_exe:
         cmd = [
             ogr2ogr_exe,
@@ -72,7 +89,8 @@ def upload_shapefile(request):
             conn_str,
             shp_file,
             "-nln", layer_name,
-            "-nlt", "PROMOTE_TO_MULTI",
+            "-nlt", nlt,
+            ] + extra + [
             "-lco", "GEOMETRY_NAME=geom",
             "-lco", "FID=gid",
             "-overwrite",
@@ -82,7 +100,8 @@ def upload_shapefile(request):
             return JsonResponse({
                 "error": "ogr2ogr CLI failed",
                 "stdout": proc.stdout,
-                "stderr": proc.stderr
+                "stderr": proc.stderr,
+                "chosen_nlt":   nlt
             }, status=500)
     else:
         try:
@@ -151,4 +170,9 @@ def upload_shapefile(request):
         }, status=500)
 
     # 7) Success!
-    return JsonResponse({"success": True, "layer": layer_name, "srs": srs_code})
+    return JsonResponse({
+        "success":    True,
+        "layer":      layer_name,
+        "srs":        srs_code,
+        "chosen_nlt": nlt
+    })
