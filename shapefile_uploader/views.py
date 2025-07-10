@@ -79,9 +79,7 @@ def upload_shapefile(request):
     print(nlt)
     # 5) Ingest into PostGIS (CLI w/ PROMOTE_TO_MULTI or Python API)
     ogr2ogr_exe = shutil.which("ogr2ogr")
-    extra = []
-    if geom_type in (ogr.wkbMultiLineString, ogr.wkbMultiPoint, ogr.wkbMultiPolygon):
-        extra = ["-explodecollections"]
+
     if ogr2ogr_exe:
         cmd = [
             ogr2ogr_exe,
@@ -90,7 +88,6 @@ def upload_shapefile(request):
             shp_file,
             "-nln", layer_name,
             "-nlt", nlt,
-            ] + extra + [
             "-lco", "GEOMETRY_NAME=geom",
             "-lco", "FID=gid",
             "-overwrite",
