@@ -33,14 +33,27 @@ def upload_shapefile(request):
     # 2) Locate .shp
     shp_file = next(
         (os.path.join(tmp_dir, fn)
-            for fn in os.listdir(tmp_dir)
-            if fn.lower().endswith('.shp')),
+         for fn in os.listdir(tmp_dir)
+         if fn.lower().endswith('.shp')),
         None
     )
     if not shp_file:
         return JsonResponse({'error': 'No .shp found in upload'}, status=400)
 
-    # 3) Build PostGIS DSN
+    # 3) Read source SRS from .prj (with fallback)
+    src_ds    = ogr.Open(shp_file)
+    src_layer = src_ds.GetLayer()
+    srs       = src_layer.GetSpatialRef()
+    if srs:
+        auth_name = srs.GetAuthorityName(None)
+        auth_code = srs.GetAuthorityCode(None)
+        srs_code  = f"{auth_name}:{auth_code}" if auth_name and auth_code else srs.ExportToProj4()
+    else:
+        # no .prj present — choose a sensible default or error out
+        srs_code = "EPSG:3857"
+    src_ds.Destroy()
+
+    # 4) Build PostGIS DSN
     pg = settings.DATABASES['default']
     conn_str = (
         f"PG:dbname={pg['NAME']} "
@@ -50,7 +63,7 @@ def upload_shapefile(request):
         f"password={pg['PASSWORD']}"
     )
 
-    # 4) Try ogr2ogr CLI first (with PROMOTE_TO_MULTI)
+    # 5) Ingest into PostGIS (CLI w/ PROMOTE_TO_MULTI or Python API)
     ogr2ogr_exe = shutil.which("ogr2ogr")
     if ogr2ogr_exe:
         cmd = [
@@ -59,7 +72,7 @@ def upload_shapefile(request):
             conn_str,
             shp_file,
             "-nln", layer_name,
-            "-nlt", "PROMOTE_TO_MULTI",       # ← handle your MultiLineString
+            "-nlt", "PROMOTE_TO_MULTI",
             "-lco", "GEOMETRY_NAME=geom",
             "-lco", "FID=gid",
             "-overwrite",
@@ -72,7 +85,6 @@ def upload_shapefile(request):
                 "stderr": proc.stderr
             }, status=500)
     else:
-        # 5) Fallback: GDAL Python API
         try:
             src_ds    = ogr.Open(shp_file)
             src_layer = src_ds.GetLayer()
@@ -86,13 +98,13 @@ def upload_shapefile(request):
                 "details": str(e)
             }, status=500)
 
-    # 6) Publish to GeoServer REST (unchanged)
-    gs   = settings.GEOSERVER_URL.rstrip('/')
-    auth = (settings.GEOSERVER_USER, settings.GEOSERVER_PASS)
-    ws    = "roles_test"
-    store = "postgres"
+    # 6) Publish to GeoServer REST
+    gs    = settings.GEOSERVER_URL.rstrip('/')
+    auth  = (settings.GEOSERVER_USER, settings.GEOSERVER_PASS)
+    ws     = "roles_test"
+    store  = "postgres" 
 
-    # a) Ensure datastore exists
+    # 6a) Create datastore if needed
     ds_url = f"{gs}/rest/workspaces/{ws}/datastores/{store}.xml"
     r = requests.get(ds_url, auth=auth)
     if r.status_code == 404:
@@ -118,36 +130,25 @@ def upload_shapefile(request):
                 "details": r.text
             }, status=500)
 
-    # b) Publish featureType
+    # 6b) Publish the featureType, injecting our dynamic SRS
     ft_url = f"{gs}/rest/workspaces/{ws}/datastores/{store}/featuretypes"
-    ft_payload = f"""
+    
+    ft_xml = f"""
     <featureType>
       <name>{layer_name}</name>
       <nativeName>{layer_name}</nativeName>
       <title>{layer_name}</title>
-      <srs>EPSG:3857</srs>
+      <srs>{srs_code}</srs>
     </featureType>
     """
     r = requests.post(ft_url, auth=auth,
                       headers={"Content-Type": "text/xml"},
-                      data=ft_payload)
+                      data=ft_xml)
     if not r.ok:
         return JsonResponse({
             "error": "GeoServer publish failed",
             "details": r.text
         }, status=500)
 
-    # c) Recalculate bounds
-    bbox_url = (
-        f"{gs}/rest/workspaces/{ws}/datastores/{store}/"
-        f"featuretypes/{layer_name}.xml"
-        "?recalculate=nativebbox,latlonbbox"
-    )
-    r = requests.put(bbox_url, auth=auth)
-    if not r.ok:
-        return JsonResponse({
-            "warning": "Layer published but bbox recalc failed",
-            "details": r.text
-        }, status=202)
-
-    return JsonResponse({"success": True, "layer": layer_name})
+    # 7) Success!
+    return JsonResponse({"success": True, "layer": layer_name, "srs": srs_code})
