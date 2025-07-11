@@ -134,6 +134,10 @@ def layer_list(request, workspace, datastore):
             payload = {
                 "featureType": {
                     "name": feature_data["name"],
+                    "nativeCRS": {
+                    "@class": "projected",
+                    "$": "PROJCS[\"WGS 84 / Pseudo-Mercator\", \r\n  GEOGCS[\"WGS 84\", \r\n    DATUM[\"World Geodetic System 1984\", \r\n      SPHEROID[\"WGS 84\", 6378137.0, 298.257223563, AUTHORITY[\"EPSG\",\"7030\"]], \r\n      AUTHORITY[\"EPSG\",\"6326\"]], \r\n    PRIMEM[\"Greenwich\", 0.0, AUTHORITY[\"EPSG\",\"8901\"]], \r\n    UNIT[\"degree\", 0.017453292519943295], \r\n    AXIS[\"Geodetic longitude\", EAST], \r\n    AXIS[\"Geodetic latitude\", NORTH], \r\n    AUTHORITY[\"EPSG\",\"4326\"]], \r\n  PROJECTION[\"Popular Visualisation Pseudo Mercator\", AUTHORITY[\"EPSG\",\"1024\"]], \r\n  PARAMETER[\"semi_minor\", 6378137.0], \r\n  PARAMETER[\"latitude_of_origin\", 0.0], \r\n  PARAMETER[\"central_meridian\", 0.0], \r\n  PARAMETER[\"scale_factor\", 1.0], \r\n  PARAMETER[\"false_easting\", 0.0], \r\n  PARAMETER[\"false_northing\", 0.0], \r\n  UNIT[\"m\", 1.0], \r\n  AXIS[\"Easting\", EAST], \r\n  AXIS[\"Northing\", NORTH], \r\n  AUTHORITY[\"EPSG\",\"3857\"]]"
+                    },
                     "nativeBoundingBox": {
                         "minx": -180,
                         "maxx": 180,
