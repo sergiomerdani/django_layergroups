@@ -118,7 +118,7 @@ def upload_shapefile(request):
     # 6) Publish to GeoServer REST
     gs    = settings.GEOSERVER_URL.rstrip('/')
     auth  = (settings.GEOSERVER_USER, settings.GEOSERVER_PASS)
-    ws     = "roles_test"
+    ws     = "test"
     store  = "postgres" 
 
     # 6a) Create datastore if needed

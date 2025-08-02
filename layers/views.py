@@ -9,7 +9,7 @@ HEADERS = {"Accept": "application/json", "Content-Type": "application/json"}
 
 GEOSERVER_SETTINGS = {
     "url": "http://localhost:8080/geoserver",
-    "workspace": "roles_test",  # Replace with your actual workspace
+    "workspace": "test",  # Replace with your actual workspace
     "datastore": "postgres",
     "auth": ("admin", "geoserver"),  # Replace with your credentials
 }

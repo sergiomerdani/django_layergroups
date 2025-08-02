@@ -1,7 +1,7 @@
 import requests
 from requests.auth import HTTPBasicAuth
 
-GEOSERVER_BASE_URL = "http://localhost:8080/geoserver/rest/workspaces/roles_test"
+GEOSERVER_BASE_URL = "http://localhost:8080/geoserver/rest/workspaces/test"
 AUTH = ("admin", "geoserver")  # Replace with your GeoServer credentials
 
 def get_geoserver_styles():

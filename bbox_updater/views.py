@@ -14,7 +14,7 @@ def update_bbox(request, layer_name):
         "port": 5432
     }
 
-    workspace = "roles_test"
+    workspace = "test"
     datastore = "postgres"
     geoserver_url = "http://localhost:8080"
     geoserver_user = "admin"

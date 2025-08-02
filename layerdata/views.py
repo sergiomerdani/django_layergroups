@@ -5,7 +5,7 @@ import requests
 
 GEOSERVER_URL = "http://localhost:8080/geoserver"
 AUTH = ("admin", "geoserver")  # Replace with actual credentials
-workspace = "roles_test"  # Replace with your actual workspace
+workspace = "test"  # Replace with your actual workspace
 
 @api_view(["GET"])
 def get_layer_details(request, layer_name):

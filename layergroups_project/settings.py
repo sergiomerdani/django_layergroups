@@ -78,7 +78,7 @@ WSGI_APPLICATION = "layergroups_project.wsgi.application"
 DATABASES = {
     'default': {
         'ENGINE': 'django.db.backends.postgresql',
-        'NAME': 'postgis_sample',
+        'NAME': 'postgis_35_sample',
         'USER': 'postgres',
         'PASSWORD': 'postgres',
         'HOST': 'localhost',

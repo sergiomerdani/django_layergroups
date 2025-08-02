@@ -9,7 +9,7 @@ from rest_framework import status
 GEOSERVER_URL  = "http://localhost:8080/geoserver/rest"
 GEOSERVER_USER = "admin"
 GEOSERVER_PASS = "geoserver"
-workspace = "roles_test" 
+workspace = "test" 
 # ──────────────────────────────────────────────────────────────────
 
 

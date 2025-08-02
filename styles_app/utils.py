@@ -1,7 +1,7 @@
 # utils.py
 import requests
 
-GEOSERVER_BASE_URL = "http://localhost:8080/geoserver/rest/workspaces/roles_test"
+GEOSERVER_BASE_URL = "http://localhost:8080/geoserver/rest/workspaces/test"
 AUTH = ("admin", "geoserver")  # Replace with your GeoServer credentials
 
 def list_styles():
