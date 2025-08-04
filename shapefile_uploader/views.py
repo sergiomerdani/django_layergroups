@@ -62,9 +62,9 @@ def upload_shapefile(request):
     if geom_type == "Point":
         nlt = "Point"
     elif geom_type == "Line String":
-        nlt = "MultiLineString"
+        nlt = "LineString"
     elif geom_type == "Polygon":
-        nlt = "MultiPolygon"
+        nlt = "Polygon"
     else:
         nlt = "PROMOTE_TO_MULTI"
     # 4) Build PostGIS DSN
