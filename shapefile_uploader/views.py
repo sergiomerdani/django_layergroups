@@ -90,7 +90,7 @@ def upload_shapefile(request):
             "-nln", layer_name,
             "-nlt", nlt,
             "-lco", "GEOMETRY_NAME=geom",
-            "-lco", "FID=gid",
+            "-lco", "FID=fid",
             "-overwrite",
         ]
         proc = subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
