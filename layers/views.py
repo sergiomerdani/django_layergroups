@@ -148,7 +148,6 @@ def layer_list(request, workspace, datastore):
                     "srs": "EPSG:3857",
                     "attributes": {
                         "attribute": [
-                            {"name": "id", "binding": "java.lang.Integer"},
                             {"name": "geom", "binding": geometry_binding}
                         ]
                     }
