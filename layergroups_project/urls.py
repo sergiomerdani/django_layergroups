@@ -20,6 +20,7 @@ urlpatterns = [
     path('api/bbox/', include('bbox_updater.urls')),
     path('api/', include('layer_scale_visibility.urls')),
     path('api/', include('shapefile_uploader.urls')),
+    path('api/', include('site_selection.urls')),
 ]
 if settings.DEBUG:
     urlpatterns += static(settings.MEDIA_URL, document_root=settings.MEDIA_ROOT)
