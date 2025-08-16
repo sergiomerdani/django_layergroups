@@ -69,136 +69,152 @@ def site_selection(request):
 
         # ✅ Step 2: Insert computed candidates into Postgres table
         with connection.cursor() as cursor:
+    # ✅ Step 2: Insert computed candidates
+            libs_cte = (
+                f"""
+                libs AS (
+                SELECT ST_Transform(geom, 4326)::geography AS g
+                FROM public."{facilities_layer}"
+                WHERE geom IS NOT NULL
+                ),
+                """
+                if facilities_layer
+                else """
+                libs AS (
+                SELECT NULL::geography AS g
+                WHERE FALSE
+                ),
+                """
+            )
+
             insert_sql = f"""
             INSERT INTO public."{candidate_layer_name}"
-              (geom, demand_covered, avg_dist, radius_m, grid_m, min_from_lib_m)
+            (geom, demand_covered, avg_dist, radius_m, grid_m, min_from_lib_m)
             WITH RECURSIVE
             params AS (
-              SELECT
+            SELECT
                 %s::float8 AS D,
                 %s::float8 AS grid_m,
                 %s::float8 AS min_from_lib_m,
                 %s::int    AS K
             ),
-            libs AS (
-              SELECT ST_Transform(geom, 4326)::geography AS g
-              FROM public."{facilities_layer}"
-              WHERE geom IS NOT NULL
-            ),
+            {libs_cte}
             schools AS (
-              SELECT fid, ST_Transform(geom, 4326)::geography AS g
-              FROM public."{demand_layer}" s
-              WHERE geom IS NOT NULL
+            SELECT fid, ST_Transform(geom, 4326)::geography AS g
+            FROM public."{demand_layer}" s
+            WHERE geom IS NOT NULL
                 AND NOT EXISTS (
-                  SELECT 1
-                  FROM libs l
-                  WHERE ST_DWithin(
+                SELECT 1
+                FROM libs l
+                WHERE ST_DWithin(
                     ST_Transform(s.geom, 4326)::geography,
                     l.g,
                     (SELECT D FROM params)
-                  )
+                )
                 )
             ),
             grid_area AS (
-              SELECT ST_Transform(
-                       ST_Buffer(
-                         ST_Union(ST_Transform(geom, 4326))::geography,
-                         (SELECT D FROM params) * 2
-                       )::geometry,
-                       4326
-                     ) AS g
-              FROM public."{demand_layer}" s
-              WHERE geom IS NOT NULL
+            SELECT ST_Transform(
+                    ST_Buffer(
+                        ST_Union(ST_Transform(geom, 4326))::geography,
+                        (SELECT D FROM params) * 2
+                    )::geometry,
+                    4326
+                    ) AS g
+            FROM public."{demand_layer}" s
+            WHERE geom IS NOT NULL
                 AND NOT EXISTS (
-                  SELECT 1
-                  FROM libs l
-                  WHERE ST_DWithin(
+                SELECT 1
+                FROM libs l
+                WHERE ST_DWithin(
                     ST_Transform(s.geom, 4326)::geography,
                     l.g,
                     (SELECT D FROM params)
-                  )
+                )
                 )
             ),
             grid_cells AS (
-              SELECT ST_Transform(geom, 4326) AS cell
-              FROM ST_HexagonGrid(
-                     (SELECT grid_m FROM params),
-                     (SELECT ST_Transform(g, 3857) FROM grid_area)
-                   ) AS h(geom)
+            SELECT ST_Transform(geom, 4326) AS cell
+            FROM ST_HexagonGrid(
+                    (SELECT grid_m FROM params),
+                    (SELECT ST_Transform(g, 3857) FROM grid_area)
+                ) AS h(geom)
             ),
             candidates_ok AS (
-              SELECT row_number() OVER () AS cand_id,
-                     ST_PointOnSurface(cell)::geometry(Point,4326) AS geom
-              FROM grid_cells
-              WHERE NOT EXISTS (
+            SELECT row_number() OVER () AS cand_id,
+                    ST_PointOnSurface(cell)::geometry(Point,4326) AS geom
+            FROM grid_cells
+            WHERE NOT EXISTS (
                 SELECT 1
                 FROM libs l
                 WHERE ST_DWithin(ST_PointOnSurface(cell)::geography, l.g, (SELECT min_from_lib_m FROM params))
-              )
+            )
             ),
             cand_cov AS (
-              SELECT c.cand_id, c.geom, s.fid AS school_id,
-                     ST_Distance(c.geom::geography, s.g) AS dist
-              FROM candidates_ok c
-              JOIN schools s
+            SELECT c.cand_id, c.geom, s.fid AS school_id,
+                    ST_Distance(c.geom::geography, s.g) AS dist
+            FROM candidates_ok c
+            JOIN schools s
                 ON ST_DWithin(c.geom::geography, s.g, (SELECT D FROM params))
             ),
             recursion AS (
-              SELECT chosen_ids, covered_schools, step
-              FROM (
+            SELECT chosen_ids, covered_schools, step
+            FROM (
                 SELECT 
-                  ARRAY[cand_id]::int[] AS chosen_ids,
-                  ARRAY_AGG(DISTINCT school_id)::int[] AS covered_schools,
-                  1::int AS step
+                ARRAY[cand_id]::int[] AS chosen_ids,
+                ARRAY_AGG(DISTINCT school_id)::int[] AS covered_schools,
+                1::int AS step
                 FROM cand_cov
                 GROUP BY cand_id
                 ORDER BY COUNT(DISTINCT school_id) DESC, AVG(dist) ASC
                 LIMIT 1
-              ) start
+            ) start
 
-              UNION ALL
+            UNION ALL
 
-              SELECT
+            SELECT
                 (r.chosen_ids || nb.cand_id)::int[],
                 (r.covered_schools || nb.new_cover)::int[],
                 (r.step + 1)::int
-              FROM recursion r
-              JOIN LATERAL (
+            FROM recursion r
+            JOIN LATERAL (
                 SELECT cand_id,
-                       ARRAY_AGG(DISTINCT school_id)::int[] AS new_cover
+                    ARRAY_AGG(DISTINCT school_id)::int[] AS new_cover
                 FROM cand_cov
                 WHERE cand_id <> ALL(r.chosen_ids)
-                  AND school_id <> ALL(r.covered_schools)
+                AND school_id <> ALL(r.covered_schools)
                 GROUP BY cand_id
                 ORDER BY COUNT(DISTINCT school_id) DESC, AVG(dist) ASC
                 LIMIT 1
-              ) nb ON TRUE
-              WHERE r.step < (SELECT K FROM params)
+            ) nb ON TRUE
+            WHERE r.step < (SELECT K FROM params)
                 AND CARDINALITY(r.covered_schools) < (SELECT COUNT(*) FROM schools)
             ),
             final_candidates AS (
-              SELECT DISTINCT unnest(chosen_ids) AS cand_id
-              FROM recursion
+            SELECT DISTINCT unnest(chosen_ids) AS cand_id
+            FROM recursion
             ),
             final_with_stats AS (
-              SELECT c.geom,
-                     COUNT(cov.school_id) AS demand_covered,
-                     AVG(cov.dist) AS avg_dist
-              FROM final_candidates fc
-              JOIN candidates_ok c ON c.cand_id = fc.cand_id
-              LEFT JOIN cand_cov cov ON cov.cand_id = c.cand_id
-              GROUP BY c.geom
+            SELECT c.geom,
+                    COUNT(cov.school_id) AS demand_covered,
+                    AVG(cov.dist) AS avg_dist
+            FROM final_candidates fc
+            JOIN candidates_ok c ON c.cand_id = fc.cand_id
+            LEFT JOIN cand_cov cov ON cov.cand_id = c.cand_id
+            GROUP BY c.geom
             )
             SELECT 
-              ST_Transform(geom, 3857) AS geom,
-              demand_covered,
-              avg_dist,
-              p.D AS radius_m,
-              p.grid_m,
-              p.min_from_lib_m
+            ST_Transform(geom, 3857) AS geom,
+            demand_covered,
+            avg_dist,
+            p.D AS radius_m,
+            p.grid_m,
+            p.min_from_lib_m
             FROM final_with_stats, params p;
             """
+
             cursor.execute(insert_sql, [D, grid, minLib, K])
+
 
         return JsonResponse({"status": "success", "layer": candidate_layer_name})
 
