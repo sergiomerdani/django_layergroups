@@ -7,14 +7,14 @@ import requests
 
 GEOSERVER_SETTINGS = {
     "url": "http://localhost:8080/geoserver",
-    "workspace": "finiq_ws",
-    "datastore": "finiqi_data",
+    "workspace": "test",
+    "datastore": "postgres",
     "auth": ("admin", "geoserver"),  # Replace with your credentials
 }
 
 # Database connection settings
 DB_SETTINGS = {
-    "dbname": "bashkia_finiq",
+    "dbname": "postgis_35_sample",
     "user": "postgres",
     "password": "postgres",
     "host": "localhost",

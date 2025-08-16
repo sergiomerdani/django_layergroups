@@ -1,17 +1,23 @@
-# views.py
 from django.http import JsonResponse
 from django.views.decorators.csrf import csrf_exempt
 from django.db import connection
 import json
+import re
+import requests
+
+AUTH = ("admin", "geoserver")  # 🔑 adjust credentials
+GEOSERVER_URL = "http://localhost:8080/geoserver"
+WORKSPACE = "test"
+DATASTORE = "postgres"
+
 
 @csrf_exempt
 def site_selection(request):
     if request.method != "POST":
         return JsonResponse({"error": "POST required"}, status=405)
 
-    # Read incoming params
     data = json.loads(request.body)
-    candidate_layer_name = data.get("candidateLayerName")
+    candidate_layer_name = re.sub(r"[^a-zA-Z0-9_]", "", data.get("candidateLayerName", ""))
     demand_layer = data.get("demandLayer")
     facilities_layer = data.get("facilitiesLayer")
     D = data.get("D")
@@ -19,18 +25,53 @@ def site_selection(request):
     grid = data.get("grid")
     K = data.get("K")
 
-    # Debug print to console
-    print("=== Site Selection Params ===")
-    print("Candidate Layer:", candidate_layer_name)
-    print("Demand Layer:", demand_layer)
-    print("Facilities Layer:", facilities_layer)
-    print("D:", D, "minLib:", minLib, "grid:", grid, "K:", K)
-
     try:
+        # ✅ Step 1: Check if layer already exists
+        featuretype_url = (
+            f"{GEOSERVER_URL}/rest/workspaces/{WORKSPACE}/datastores/{DATASTORE}/featuretypes/{candidate_layer_name}.json"
+        )
+        r = requests.get(featuretype_url, auth=AUTH)
+
+        if r.status_code == 404:
+            # ❌ Not found → create new featuretype
+            create_url = f"{GEOSERVER_URL}/rest/workspaces/{WORKSPACE}/datastores/{DATASTORE}/featuretypes"
+            payload = {
+                "featureType": {
+                    "name": candidate_layer_name,
+                    "nativeCRS": "EPSG:3857",
+                    "srs": "EPSG:3857",
+                    "attributes": {
+                        "attribute": [
+                            {"name": "id", "binding": "java.lang.Long"},
+                            {"name": "geom", "binding": "org.locationtech.jts.geom.Point"},
+                            {"name": "demand_covered", "binding": "java.lang.Integer"},
+                            {"name": "avg_dist", "binding": "java.lang.Double"},
+                            {"name": "radius_m", "binding": "java.lang.Double"},
+                            {"name": "grid_m", "binding": "java.lang.Double"},
+                            {"name": "min_from_lib_m", "binding": "java.lang.Double"},
+                        ]
+                    },
+                }
+            }
+            cr = requests.post(
+                create_url,
+                json=payload,
+                auth=AUTH,
+                headers={"Content-Type": "application/json"},
+            )
+            if cr.status_code not in (200, 201):
+                return JsonResponse({"error": f"GeoServer create failed: {cr.text}"}, status=500)
+
+        elif r.status_code not in (200, 201):
+            return JsonResponse({"error": f"GeoServer check failed: {r.text}"}, status=500)
+        else:
+            print(f"✅ Layer {candidate_layer_name} already exists, skipping creation")
+
+        # ✅ Step 2: Insert computed candidates into Postgres table
         with connection.cursor() as cursor:
-            sql = f"""
+            insert_sql = f"""
             INSERT INTO public."{candidate_layer_name}"
-              (geom, schools_covered, avg_dist, radius_m, grid_m, min_from_lib_m)
+              (geom, demand_covered, avg_dist, radius_m, grid_m, min_from_lib_m)
             WITH RECURSIVE
             params AS (
               SELECT
@@ -103,7 +144,6 @@ def site_selection(request):
                 ON ST_DWithin(c.geom::geography, s.g, (SELECT D FROM params))
             ),
             recursion AS (
-              -- Initial best candidate
               SELECT chosen_ids, covered_schools, step
               FROM (
                 SELECT 
@@ -118,7 +158,6 @@ def site_selection(request):
 
               UNION ALL
 
-              -- Add next best candidate for uncovered schools
               SELECT
                 (r.chosen_ids || nb.cand_id)::int[],
                 (r.covered_schools || nb.new_cover)::int[],
@@ -143,7 +182,7 @@ def site_selection(request):
             ),
             final_with_stats AS (
               SELECT c.geom,
-                     COUNT(cov.school_id) AS schools_covered,
+                     COUNT(cov.school_id) AS demand_covered,
                      AVG(cov.dist) AS avg_dist
               FROM final_candidates fc
               JOIN candidates_ok c ON c.cand_id = fc.cand_id
@@ -152,15 +191,16 @@ def site_selection(request):
             )
             SELECT 
               ST_Transform(geom, 3857) AS geom,
-              schools_covered,
+              demand_covered,
               avg_dist,
               p.D AS radius_m,
               p.grid_m,
               p.min_from_lib_m
             FROM final_with_stats, params p;
             """
-            cursor.execute(sql, [D, grid, minLib, K])
+            cursor.execute(insert_sql, [D, grid, minLib, K])
 
-        return JsonResponse({"status": "success"})
+        return JsonResponse({"status": "success", "layer": candidate_layer_name})
+
     except Exception as e:
         return JsonResponse({"error": str(e)}, status=500)
