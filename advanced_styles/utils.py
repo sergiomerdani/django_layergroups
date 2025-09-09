@@ -480,6 +480,8 @@ def generate_graduated_sld(style_data):
     </sld:Stroke>
   </sld:PolygonSymbolizer>
 """
+
+
         elif geom_type == "line":
             sld += f"""
   <sld:LineSymbolizer>
@@ -507,7 +509,26 @@ def generate_graduated_sld(style_data):
     </sld:Graphic>
   </sld:PointSymbolizer>
 """
+        
+        
+                # optional label support
+        if style_data.get("label_enabled", False) and style_data.get("label_field"):
+            label_field = style_data["label_field"]
+            font_family = style_data.get("font_family", "Arial")
+            font_size   = style_data.get("font_size", 10)
+            font_style  = style_data.get("font_style", "normal")
+            font_weight = style_data.get("font_weight", "normal")
+            font_color  = style_data.get("font_color", "#000000")
 
+            sld += _make_text_symbolizer(
+                label_field,
+                font_family,
+                font_size,
+                font_style,
+                font_weight,
+                font_color
+            )
+            
         sld += "  </sld:Rule>\n"
 
     sld += _sld_footer()
