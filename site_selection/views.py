@@ -42,7 +42,7 @@ def site_selection(request):
                     "srs": "EPSG:3857",
                     "attributes": {
                         "attribute": [
-                            {"name": "id", "binding": "java.lang.Long"},
+                            {"name": "fid", "binding": "java.lang.Long"},
                             {"name": "geom", "binding": "org.locationtech.jts.geom.Point"},
                             {"name": "demand_covered", "binding": "java.lang.Integer"},
                             {"name": "avg_dist", "binding": "java.lang.Double"},

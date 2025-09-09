@@ -28,7 +28,7 @@ def create_geoserver_style(style_data):
     if "style_type" not in style_data:
         raise ValueError("The 'style_type' field is required.")
 
-    sld_body = generate_single_sld(style_data)
+    sld_body = generate_graduated_sld(style_data)
 
     headers = {'Content-Type': 'application/vnd.ogc.sld+xml'}
     response = requests.post(
@@ -389,6 +389,129 @@ def generate_rule_sld(style_data):
     sld += "  </sld:Rule>\n"
     sld += _sld_footer()
     return sld
+  
+  
+  
+
+def get_field_min_max(workspace, layer_name, field_name):
+    """
+    Fetch min/max values for a field using WFS request.
+    """
+    wfs_url = f"http://localhost:8080/geoserver/{workspace}/ows"
+    params = {
+        "service": "WFS",
+        "version": "1.0.0",
+        "request": "GetFeature",
+        "typeName": f"{workspace}:{layer_name}",
+        "propertyName": field_name,
+        "outputFormat": "application/json"
+    }
+
+    response = requests.get(wfs_url, params=params, auth=HTTPBasicAuth("admin", "geoserver"))
+    response.raise_for_status()
+    features = response.json()["features"]
+
+    values = [f["properties"].get(field_name) for f in features if f["properties"].get(field_name) is not None]
+    return min(values), max(values)
+
+def generate_graduated_sld(style_data):
+    """
+    Generate graduated SLD with equal-interval classes (auto min/max).
+    """
+    workspace   = style_data.get("workspace", "test")
+    layer_name  = style_data["layer_name"]
+    style_name  = style_data.get("name", "graduated_style")
+    field       = style_data["field_name"]
+    geom_type   = style_data.get("geometry_type", "polygon")
+    num_classes = int(style_data.get("num_classes", 5))
+
+    # auto fetch min/max
+    min_val, max_val = get_field_min_max(workspace, layer_name, field)
+
+    # colors
+    start_color = style_data.get("start_color", "#fee5d9")
+    end_color   = style_data.get("end_color", "#a50f15")
+
+    def interpolate_color(c1, c2, t):
+        c1 = [int(c1[i:i+2], 16) for i in (1, 3, 5)]
+        c2 = [int(c2[i:i+2], 16) for i in (1, 3, 5)]
+        interp = [int(c1[i] + (c2[i]-c1[i]) * t) for i in range(3)]
+        return "#%02x%02x%02x" % tuple(interp)
+
+    # calculate breaks
+    interval = (max_val - min_val) / num_classes
+    breaks = [(min_val + i*interval, min_val + (i+1)*interval) for i in range(num_classes)]
+
+    # build SLD
+    sld = _sld_header(layer_name, style_name)
+
+    for i, (low, high) in enumerate(breaks):
+        color = interpolate_color(start_color, end_color, i/(num_classes-1))
+        sld += _open_rule(f"class_{i+1}")
+
+        # rule filter
+        sld += f"""
+  <sld:Filter>
+    <ogc:And>
+      <ogc:PropertyIsGreaterThanOrEqualTo>
+        <ogc:PropertyName>{field}</ogc:PropertyName>
+        <ogc:Literal>{low}</ogc:Literal>
+      </ogc:PropertyIsGreaterThanOrEqualTo>
+      <ogc:PropertyIsLessThanOrEqualTo>
+        <ogc:PropertyName>{field}</ogc:PropertyName>
+        <ogc:Literal>{high}</ogc:Literal>
+      </ogc:PropertyIsLessThanOrEqualTo>
+    </ogc:And>
+  </sld:Filter>
+"""
+
+        # geometry-based symbolizers
+        if geom_type == "polygon":
+            sld += f"""
+  <sld:PolygonSymbolizer>
+    <sld:Fill>
+      <sld:CssParameter name="fill">{color}</sld:CssParameter>
+      <sld:CssParameter name="fill-opacity">0.7</sld:CssParameter>
+    </sld:Fill>
+    <sld:Stroke>
+      <sld:CssParameter name="stroke">#000000</sld:CssParameter>
+      <sld:CssParameter name="stroke-width">0.5</sld:CssParameter>
+    </sld:Stroke>
+  </sld:PolygonSymbolizer>
+"""
+        elif geom_type == "line":
+            sld += f"""
+  <sld:LineSymbolizer>
+    <sld:Stroke>
+      <sld:CssParameter name="stroke">{color}</sld:CssParameter>
+      <sld:CssParameter name="stroke-width">2</sld:CssParameter>
+    </sld:Stroke>
+  </sld:LineSymbolizer>
+"""
+        else:  # point
+            sld += f"""
+  <sld:PointSymbolizer>
+    <sld:Graphic>
+      <sld:Mark>
+        <sld:WellKnownName>circle</sld:WellKnownName>
+        <sld:Fill>
+          <sld:CssParameter name="fill">{color}</sld:CssParameter>
+        </sld:Fill>
+        <sld:Stroke>
+          <sld:CssParameter name="stroke">#000000</sld:CssParameter>
+          <sld:CssParameter name="stroke-width">0.5</sld:CssParameter>
+        </sld:Stroke>
+      </sld:Mark>
+      <sld:Size>8</sld:Size>
+    </sld:Graphic>
+  </sld:PointSymbolizer>
+"""
+
+        sld += "  </sld:Rule>\n"
+
+    sld += _sld_footer()
+    return sld
+
 
 
   
