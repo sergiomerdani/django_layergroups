@@ -424,6 +424,12 @@ def generate_graduated_sld(style_data):
     field       = style_data["field_name"]
     geom_type   = style_data.get("geometry_type", "polygon")
     num_classes = int(style_data.get("num_classes", 5))
+    fill_opacity   = style_data.get("fill_opacity", 1.0)   
+    stroke_opacity = style_data.get("stroke_opacity", 1.0)
+    min_scale = style_data.get("min_scale_denominator")
+    max_scale = style_data.get("max_scale_denominator")
+
+
 
     # auto fetch min/max
     min_val, max_val = get_field_min_max(workspace, layer_name, field)
@@ -447,7 +453,8 @@ def generate_graduated_sld(style_data):
 
     for i, (low, high) in enumerate(breaks):
         color = interpolate_color(start_color, end_color, i/(num_classes-1))
-        sld += _open_rule(f"{int(low)} - {int(high)}")
+        sld += _open_rule(f"{int(low)} - {int(high)}", min_scale, max_scale)
+
 
 
         # rule filter
@@ -470,14 +477,16 @@ def generate_graduated_sld(style_data):
         if geom_type == "polygon":
             sld += f"""
   <sld:PolygonSymbolizer>
-    <sld:Fill>
-      <sld:CssParameter name="fill">{color}</sld:CssParameter>
-      <sld:CssParameter name="fill-opacity">0.7</sld:CssParameter>
-    </sld:Fill>
-    <sld:Stroke>
-      <sld:CssParameter name="stroke">#000000</sld:CssParameter>
-      <sld:CssParameter name="stroke-width">0.5</sld:CssParameter>
-    </sld:Stroke>
+<sld:Fill>
+  <sld:CssParameter name="fill">{color}</sld:CssParameter>
+  <sld:CssParameter name="fill-opacity">{fill_opacity}</sld:CssParameter>
+</sld:Fill>
+<sld:Stroke>
+  <sld:CssParameter name="stroke">#000000</sld:CssParameter>
+  <sld:CssParameter name="stroke-width">0.5</sld:CssParameter>
+  <sld:CssParameter name="stroke-opacity">{stroke_opacity}</sld:CssParameter>
+</sld:Stroke>
+
   </sld:PolygonSymbolizer>
 """
 
