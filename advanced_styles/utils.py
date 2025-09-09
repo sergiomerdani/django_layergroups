@@ -447,7 +447,8 @@ def generate_graduated_sld(style_data):
 
     for i, (low, high) in enumerate(breaks):
         color = interpolate_color(start_color, end_color, i/(num_classes-1))
-        sld += _open_rule(f"class_{i+1}")
+        sld += _open_rule(f"{int(low)} - {int(high)}")
+
 
         # rule filter
         sld += f"""
