@@ -424,12 +424,11 @@ def generate_graduated_sld(style_data):
     field       = style_data["field_name"]
     geom_type   = style_data.get("geometry_type", "polygon")
     num_classes = int(style_data.get("num_classes", 5))
+
     fill_opacity   = style_data.get("fill_opacity", 1.0)   
     stroke_opacity = style_data.get("stroke_opacity", 1.0)
     min_scale = style_data.get("min_scale_denominator")
     max_scale = style_data.get("max_scale_denominator")
-
-
 
     # auto fetch min/max
     min_val, max_val = get_field_min_max(workspace, layer_name, field)
@@ -455,8 +454,6 @@ def generate_graduated_sld(style_data):
         color = interpolate_color(start_color, end_color, i/(num_classes-1))
         sld += _open_rule(f"{int(low)} - {int(high)}", min_scale, max_scale)
 
-
-
         # rule filter
         sld += f"""
   <sld:Filter>
@@ -477,26 +474,24 @@ def generate_graduated_sld(style_data):
         if geom_type == "polygon":
             sld += f"""
   <sld:PolygonSymbolizer>
-<sld:Fill>
-  <sld:CssParameter name="fill">{color}</sld:CssParameter>
-  <sld:CssParameter name="fill-opacity">{fill_opacity}</sld:CssParameter>
-</sld:Fill>
-<sld:Stroke>
-  <sld:CssParameter name="stroke">#000000</sld:CssParameter>
-  <sld:CssParameter name="stroke-width">0.5</sld:CssParameter>
-  <sld:CssParameter name="stroke-opacity">{stroke_opacity}</sld:CssParameter>
-</sld:Stroke>
-
+    <sld:Fill>
+      <sld:CssParameter name="fill">{color}</sld:CssParameter>
+      <sld:CssParameter name="fill-opacity">{fill_opacity}</sld:CssParameter>
+    </sld:Fill>
+    <sld:Stroke>
+      <sld:CssParameter name="stroke">#000000</sld:CssParameter>
+      <sld:CssParameter name="stroke-width">0.5</sld:CssParameter>
+      <sld:CssParameter name="stroke-opacity">{stroke_opacity}</sld:CssParameter>
+    </sld:Stroke>
   </sld:PolygonSymbolizer>
 """
-
-
         elif geom_type == "line":
             sld += f"""
   <sld:LineSymbolizer>
     <sld:Stroke>
       <sld:CssParameter name="stroke">{color}</sld:CssParameter>
       <sld:CssParameter name="stroke-width">2</sld:CssParameter>
+      <sld:CssParameter name="stroke-opacity">{stroke_opacity}</sld:CssParameter>
     </sld:Stroke>
   </sld:LineSymbolizer>
 """
@@ -508,19 +503,20 @@ def generate_graduated_sld(style_data):
         <sld:WellKnownName>circle</sld:WellKnownName>
         <sld:Fill>
           <sld:CssParameter name="fill">{color}</sld:CssParameter>
+          <sld:CssParameter name="fill-opacity">{fill_opacity}</sld:CssParameter>
         </sld:Fill>
         <sld:Stroke>
           <sld:CssParameter name="stroke">#000000</sld:CssParameter>
           <sld:CssParameter name="stroke-width">0.5</sld:CssParameter>
+          <sld:CssParameter name="stroke-opacity">{stroke_opacity}</sld:CssParameter>
         </sld:Stroke>
       </sld:Mark>
       <sld:Size>8</sld:Size>
     </sld:Graphic>
   </sld:PointSymbolizer>
 """
-        
-        
-                # optional label support
+
+        # optional label support inside each rule
         if style_data.get("label_enabled", False) and style_data.get("label_field"):
             label_field = style_data["label_field"]
             font_family = style_data.get("font_family", "Arial")
@@ -529,19 +525,67 @@ def generate_graduated_sld(style_data):
             font_weight = style_data.get("font_weight", "normal")
             font_color  = style_data.get("font_color", "#000000")
 
-            sld += _make_text_symbolizer(
-                label_field,
-                font_family,
-                font_size,
-                font_style,
-                font_weight,
-                font_color
-            )
-            
+            if geom_type == "polygon":
+                # centroid placement
+                sld += _make_text_symbolizer(label_field, font_family, font_size, font_style, font_weight, font_color)
+
+            elif geom_type == "line":
+                sld += f"""
+  <sld:TextSymbolizer>
+    <sld:Label>
+      <ogc:PropertyName>{label_field}</ogc:PropertyName>
+    </sld:Label>
+    <sld:Font>
+      <sld:CssParameter name="font-family">{font_family}</sld:CssParameter>
+      <sld:CssParameter name="font-size">{font_size}</sld:CssParameter>
+      <sld:CssParameter name="font-style">{font_style}</sld:CssParameter>
+      <sld:CssParameter name="font-weight">{font_weight}</sld:CssParameter>
+    </sld:Font>
+    <sld:LabelPlacement>
+      <sld:LinePlacement>
+        <sld:PerpendicularOffset>5</sld:PerpendicularOffset>
+      </sld:LinePlacement>
+    </sld:LabelPlacement>
+    <sld:Fill>
+      <sld:CssParameter name="fill">{font_color}</sld:CssParameter>
+    </sld:Fill>
+  </sld:TextSymbolizer>
+"""
+            else:  # point
+                sld += f"""
+  <sld:TextSymbolizer>
+    <sld:Label>
+      <ogc:PropertyName>{label_field}</ogc:PropertyName>
+    </sld:Label>
+    <sld:Font>
+      <sld:CssParameter name="font-family">{font_family}</sld:CssParameter>
+      <sld:CssParameter name="font-size">{font_size}</sld:CssParameter>
+      <sld:CssParameter name="font-style">{font_style}</sld:CssParameter>
+      <sld:CssParameter name="font-weight">{font_weight}</sld:CssParameter>
+    </sld:Font>
+    <sld:LabelPlacement>
+      <sld:PointPlacement>
+        <sld:AnchorPoint>
+          <sld:AnchorPointX>0.5</sld:AnchorPointX>
+          <sld:AnchorPointY>0.0</sld:AnchorPointY>
+        </sld:AnchorPoint>
+        <sld:Displacement>
+          <sld:DisplacementX>0</sld:DisplacementX>
+          <sld:DisplacementY>10</sld:DisplacementY>
+        </sld:Displacement>
+      </sld:PointPlacement>
+    </sld:LabelPlacement>
+    <sld:Fill>
+      <sld:CssParameter name="fill">{font_color}</sld:CssParameter>
+    </sld:Fill>
+  </sld:TextSymbolizer>
+"""
+
         sld += "  </sld:Rule>\n"
 
     sld += _sld_footer()
     return sld
+
 
 
 
