@@ -50,11 +50,17 @@ def upload_shapefile(request):
     if srs:
         auth_name = srs.GetAuthorityName(None)
         auth_code = srs.GetAuthorityCode(None)
-        srs_code  = f"{auth_name}:{auth_code}" if auth_name and auth_code else srs.ExportToProj4()
+        if auth_name and auth_code:
+            srs_code = f"{auth_name}:{auth_code}"
+        else:
+            srs_code = srs.ExportToProj4() or "EPSG:3857"
+
+        native_wkt = srs.ExportToWkt()
+        print(srs_code)
     else:
         # no .prj present — choose a sensible default or error out
         srs_code = "EPSG:3857"
-        native_wkt = srs.ExportToWkt()
+        native_wkt = None
     src_ds.Destroy()
 
 
@@ -156,31 +162,7 @@ def upload_shapefile(request):
       <nativeName>{layer_name}</nativeName>
       <title>{layer_name}</title>
       <srs>{srs_code}</srs>
-        <nativeCRS class="projected">PROJCS["WGS 84 / Pseudo-Mercator",
-        GEOGCS["WGS 84",
-        DATUM["World Geodetic System 1984",
-            SPHEROID["WGS 84", 6378137.0, 298.257223563,
-            AUTHORITY["EPSG","7030"]],
-            AUTHORITY["EPSG","6326"]],
-        PRIMEM["Greenwich", 0.0,
-            AUTHORITY["EPSG","8901"]],
-        UNIT["degree", 0.017453292519943295],
-        AXIS["Geodetic longitude", EAST],
-        AXIS["Geodetic latitude", NORTH],
-        AUTHORITY["EPSG","4326"]],
-        PROJECTION["Popular Visualisation Pseudo Mercator",
-        AUTHORITY["EPSG","1024"]],
-        PARAMETER["semi_minor", 6378137.0],
-        PARAMETER["latitude_of_origin", 0.0],
-        PARAMETER["central_meridian", 0.0],
-        PARAMETER["scale_factor", 1.0],
-        PARAMETER["false_easting", 0.0],
-        PARAMETER["false_northing", 0.0],
-        UNIT["m", 1.0],
-        AXIS["Easting", EAST],
-        AXIS["Northing", NORTH],
-        AUTHORITY["EPSG","3857"]]  
-        </nativeCRS>
+        {"<nativeCRS>" + native_wkt + "</nativeCRS>" if native_wkt else ""}
     </featureType>
     """
     r = requests.post(ft_url, auth=auth,
