@@ -40,6 +40,7 @@ INSTALLED_APPS = [
     "rest_framework",
     "table_api",
     "site_selection",
+    'geoserver_proxy',
 ]
 
 MIDDLEWARE = [

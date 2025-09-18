@@ -21,6 +21,7 @@ urlpatterns = [
     path('api/', include('layer_scale_visibility.urls')),
     path('api/', include('shapefile_uploader.urls')),
     path('api/', include('site_selection.urls')),
+    path("geoserver-proxy/", include("geoserver_proxy.urls")),
 ]
 if settings.DEBUG:
     urlpatterns += static(settings.MEDIA_URL, document_root=settings.MEDIA_ROOT)
