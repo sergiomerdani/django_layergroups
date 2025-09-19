@@ -5,7 +5,7 @@ from django.views.decorators.csrf import csrf_exempt
 
 # Configure your GeoServer endpoint + credentials
 GEOSERVER_URL = "http://localhost:8080/geoserver"
-USERNAME = "admin"
+USERNAME = "user_reader"
 PASSWORD = "geoserver"
 
 @csrf_exempt
@@ -14,7 +14,12 @@ def proxy(request, path):
     Proxies requests from frontend to GeoServer, injecting Basic Auth.
     Example: /geoserver-proxy/test/wms → http://localhost:8080/geoserver/test/wms
     """
-    url = f"{GEOSERVER_URL}/{path}"
+    if path.endswith("ows") or path.endswith("ows/"):
+        url = f"{GEOSERVER_URL}/ows"
+    else:
+        url = f"{GEOSERVER_URL}/{path}"
+
+
     headers = {
         "Authorization": "Basic " + base64.b64encode(f"{USERNAME}:{PASSWORD}".encode()).decode()
     }
