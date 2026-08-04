@@ -31,10 +31,30 @@ def get_agent_tool_parameters(action):
             "description": "Exact layer title or layer name from the map context.",
         }
 
+    if "base_layer" in action.get("required", []):
+        properties["base_layer"] = {
+            "type": "string",
+            "description": "Exact base layer title from the map context.",
+        }
+
     if "value" in action.get("required", []):
         properties["value"] = {
             "type": "boolean",
             "description": "True to enable/show, false to disable/hide.",
+        }
+
+    if "mode" in action.get("required", []):
+        properties["mode"] = {
+            "type": "string",
+            "enum": ["2d", "3d"],
+            "description": "Use 3d for Cesium globe/terrain mode or 2d for OpenLayers map mode.",
+        }
+
+    if "scale" in action.get("required", []):
+        properties["scale"] = {
+            "type": "number",
+            "minimum": 1,
+            "description": "Scale denominator. Use 5000 for a map scale of 1:5000.",
         }
 
     if "query" in action.get("required", []):
@@ -116,8 +136,29 @@ def make_frontend_action(action_type, arguments):
             raise ValueError(f"{action_type} requires a layer.")
         action["layer"] = layer
 
+    if "base_layer" in required:
+        base_layer = str(arguments.get("base_layer", "")).strip()
+        if not base_layer:
+            raise ValueError(f"{action_type} requires a base_layer.")
+        action["base_layer"] = base_layer
+
     if "value" in required:
         action["value"] = bool(arguments.get("value"))
+
+    if "mode" in required:
+        mode = str(arguments.get("mode", "")).strip().lower()
+        if mode not in {"2d", "3d"}:
+            raise ValueError(f"{action_type} requires mode to be 2d or 3d.")
+        action["mode"] = mode
+
+    if "scale" in required:
+        try:
+            scale = float(arguments.get("scale"))
+        except (TypeError, ValueError):
+            raise ValueError(f"{action_type} requires a numeric scale.")
+        if scale <= 0:
+            raise ValueError(f"{action_type} requires a positive scale.")
+        action["scale"] = scale
 
     if "query" in required:
         query = str(arguments.get("query", "")).strip()
