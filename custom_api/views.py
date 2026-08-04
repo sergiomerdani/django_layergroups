@@ -1,4 +1,5 @@
 import json
+import sys
 
 from django.conf import settings
 from django.views.decorators.csrf import csrf_exempt
@@ -228,9 +229,15 @@ def chat(request):
 
     try:
         from openai import APIStatusError, OpenAI
-    except ImportError:
+    except ImportError as exc:
         return Response(
-            {"error": "The openai package is not installed in this backend"},
+            {
+                "error": (
+                    "The OpenAI package could not be imported by the Python "
+                    f"environment running Django. Python: {sys.executable}. "
+                    f"Import error: {exc}"
+                )
+            },
             status=503,
         )
 
