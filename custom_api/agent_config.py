@@ -65,6 +65,26 @@ ACTION_SCHEMAS = [
         "required": ["scale"],
     },
     {
+        "type": "get_highest_reference_zones",
+        "description": (
+            "Read reference_zones_2025 from the backend database and list "
+            "the zones with the highest 2025 reference price."
+        ),
+        "frontend_only": False,
+        "required": ["limit"],
+    },
+    {
+        "type": "query_reference_zones",
+        "description": (
+            "Query reference_zones_2025 as structured data. Use this when the "
+            "user asks for custom fields, a specific order, sorting by a field, "
+            "filtering by zone name, or a wider/non-canned answer. Parameters "
+            "may include fields, sort_by, sort_direction, limit, and name_contains."
+        ),
+        "frontend_only": False,
+        "required": ["parameters"],
+    },
+    {
         "type": "select_layer",
         "description": "Make a named layer the active layer in the frontend.",
         "frontend_only": True,
