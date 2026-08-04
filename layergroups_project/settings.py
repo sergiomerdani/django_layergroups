@@ -10,10 +10,28 @@ For the full list of settings and their values, see
 https://docs.djangoproject.com/en/5.1/ref/settings/
 """
 
+import os
 from pathlib import Path
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
+
+
+def load_local_env():
+    env_path = BASE_DIR / ".env"
+    if not env_path.exists():
+        return
+
+    for line in env_path.read_text().splitlines():
+        line = line.strip()
+        if not line or line.startswith("#") or "=" not in line:
+            continue
+
+        key, value = line.split("=", 1)
+        os.environ.setdefault(key.strip(), value.strip().strip('"').strip("'"))
+
+
+load_local_env()
 
 
 # Quick-start development settings - unsuitable for production
@@ -40,6 +58,7 @@ INSTALLED_APPS = [
     "rest_framework",
     "table_api",
     "site_selection",
+    "custom_api",
     'geoserver_proxy',
 ]
 
@@ -91,6 +110,9 @@ DATABASES = {
 GEOSERVER_URL  = "http://localhost:8080/geoserver"
 GEOSERVER_USER = "admin"
 GEOSERVER_PASS = "geoserver"
+
+OPENAI_API_KEY = os.environ.get("OPENAI_API_KEY", "")
+OPENAI_MODEL = os.environ.get("OPENAI_MODEL", "gpt-5.4-mini")
 
 
 # Password validation

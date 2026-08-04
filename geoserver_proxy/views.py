@@ -5,7 +5,7 @@ from django.views.decorators.csrf import csrf_exempt
 
 # Configure your GeoServer endpoint + credentials
 GEOSERVER_URL = "http://localhost:8080/geoserver"
-USERNAME = "user_reader"
+USERNAME = "admin"
 PASSWORD = "geoserver"
 
 @csrf_exempt
@@ -24,11 +24,25 @@ def proxy(request, path):
         "Authorization": "Basic " + base64.b64encode(f"{USERNAME}:{PASSWORD}".encode()).decode()
     }
 
-    # Forward GET or POST request
-    if request.method == "GET":
-        r = requests.get(url, headers=headers, params=request.GET, stream=True)
-    else:
-        r = requests.post(url, headers=headers, params=request.GET, data=request.body, stream=True)
+    try:
+        # Forward GET or POST request
+        if request.method == "GET":
+            r = requests.get(url, headers=headers, params=request.GET, stream=True, timeout=10)
+        else:
+            r = requests.post(
+                url,
+                headers=headers,
+                params=request.GET,
+                data=request.body,
+                stream=True,
+                timeout=10,
+            )
+    except requests.RequestException as exc:
+        return HttpResponse(
+            f"GeoServer is not reachable at {GEOSERVER_URL}: {exc}",
+            status=502,
+            content_type="text/plain",
+        )
 
     # Build Django response
     response = HttpResponse(

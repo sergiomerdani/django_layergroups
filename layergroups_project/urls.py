@@ -8,6 +8,7 @@ urlpatterns = [
     path("api/", include("layergroups.urls")),
     path("api/", include("layers.urls")),
     path("api/", include("table_api.urls")),
+    path("api/custom/", include("custom_api.urls")),
     path("styles/", include("styles_app.urls")),
     path("api/", include("transactions.urls")),
     path("api/", include("advanced_styles.urls")),
